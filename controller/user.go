@@ -22,6 +22,7 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type LoginRequest struct {
@@ -172,6 +173,7 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserExists)
 		return
 	}
+	invitationCodeValue := strings.TrimSpace(user.InvitationCode)
 	affCode := user.AffCode // this code is the inviter's code, not the user's own code
 	inviterId, _ := model.GetUserIdByAffCode(affCode)
 	cleanUser := model.User{
@@ -184,17 +186,36 @@ func Register(c *gin.Context) {
 	if common.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
 	}
-	if err := cleanUser.Insert(inviterId); err != nil {
+	var invitationCode *model.InvitationCode
+	err = model.DB.Transaction(func(tx *gorm.DB) error {
+		if common.InvitationCodeEnabled || invitationCodeValue != "" {
+			invitationCode, err = model.GetUsableInvitationCodeWithTx(tx, invitationCodeValue)
+			if err != nil {
+				return err
+			}
+			if invitationCode.OwnerUserId != 0 {
+				inviterId = invitationCode.OwnerUserId
+			}
+		}
+		cleanUser.InviterId = inviterId
+		if err := cleanUser.InsertWithTx(tx, inviterId); err != nil {
+			return err
+		}
+		if invitationCode != nil {
+			if err := model.ConsumeInvitationCodeWithTx(tx, invitationCode, cleanUser.Id, cleanUser.Username); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		if handleInvitationCodeError(c, err) {
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
-
-	// 获取插入后的用户ID
-	var insertedUser model.User
-	if err := model.DB.Where("username = ?", cleanUser.Username).First(&insertedUser).Error; err != nil {
-		common.ApiErrorI18n(c, i18n.MsgUserRegisterFailed)
-		return
-	}
+	cleanUser.FinalizeOAuthUserCreation(inviterId)
 	// 生成默认令牌
 	if constant.GenerateDefaultToken {
 		key, err := common.GenerateKey()
@@ -205,7 +226,7 @@ func Register(c *gin.Context) {
 		}
 		// 生成默认令牌
 		token := model.Token{
-			UserId:             insertedUser.Id, // 使用插入后的用户ID
+			UserId:             cleanUser.Id,
 			Name:               cleanUser.Username + "的初始令牌",
 			Key:                key,
 			CreatedTime:        common.GetTimestamp(),
@@ -484,22 +505,24 @@ func generateDefaultSidebarConfig(userRole int) string {
 	if userRole == common.RoleAdminUser {
 		// 管理员可以访问管理员区域，但不能访问系统设置
 		defaultConfig["admin"] = map[string]interface{}{
-			"enabled":    true,
-			"channel":    true,
-			"models":     true,
-			"redemption": true,
-			"user":       true,
-			"setting":    false, // 管理员不能访问系统设置
+			"enabled":         true,
+			"channel":         true,
+			"models":          true,
+			"redemption":      true,
+			"invitation_code": true,
+			"user":            true,
+			"setting":         false, // 管理员不能访问系统设置
 		}
 	} else if userRole == common.RoleRootUser {
 		// 超级管理员可以访问所有功能
 		defaultConfig["admin"] = map[string]interface{}{
-			"enabled":    true,
-			"channel":    true,
-			"models":     true,
-			"redemption": true,
-			"user":       true,
-			"setting":    true,
+			"enabled":         true,
+			"channel":         true,
+			"models":          true,
+			"redemption":      true,
+			"invitation_code": true,
+			"user":            true,
+			"setting":         true,
 		}
 	}
 	// 普通用户不包含admin区域

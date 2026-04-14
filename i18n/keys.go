@@ -71,6 +71,21 @@ const (
 	MsgRedemptionExpireTimeInvalid = "redemption.expire_time_invalid"
 )
 
+// Invitation code related messages
+const (
+	MsgInvitationCodeRequired             = "invitation_code.required"
+	MsgInvitationCodeInvalid              = "invitation_code.invalid"
+	MsgInvitationCodeExhausted            = "invitation_code.exhausted"
+	MsgInvitationCodeExpired              = "invitation_code.expired"
+	MsgInvitationCodeDisabled             = "invitation_code.disabled"
+	MsgInvitationCodeNameLength           = "invitation_code.name_length"
+	MsgInvitationCodeCountMax             = "invitation_code.count_max"
+	MsgInvitationCodeCreateFailed         = "invitation_code.create_failed"
+	MsgInvitationCodeQuotaExceeded        = "invitation_code.quota_exceeded"
+	MsgInvitationCodeAccountTooYoung      = "invitation_code.account_too_young"
+	MsgInvitationCodeUserGenerateDisabled = "invitation_code.user_generate_disabled"
+)
+
 // User related messages
 const (
 	MsgUserPasswordLoginDisabled     = "user.password_login_disabled"

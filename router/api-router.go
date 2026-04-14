@@ -82,6 +82,9 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/passkey/verify/finish", controller.PasskeyVerifyFinish)
 				selfRoute.DELETE("/passkey", controller.PasskeyDelete)
 				selfRoute.GET("/aff", controller.GetAffCode)
+				selfRoute.GET("/invitation_codes", controller.GetMyInvitationCodes)
+				selfRoute.GET("/invitation_codes/quota", controller.GetMyInvitationCodeQuota)
+				selfRoute.POST("/invitation_codes", controller.GenerateMyInvitationCode)
 				selfRoute.GET("/topup/info", controller.GetTopUpInfo)
 				selfRoute.GET("/topup/self", controller.GetUserTopUps)
 				selfRoute.POST("/topup", middleware.CriticalRateLimit(), controller.TopUp)
@@ -280,6 +283,18 @@ func SetApiRouter(router *gin.Engine) {
 			redemptionRoute.PUT("/", controller.UpdateRedemption)
 			redemptionRoute.DELETE("/invalid", controller.DeleteInvalidRedemption)
 			redemptionRoute.DELETE("/:id", controller.DeleteRedemption)
+		}
+		invitationCodeRoute := apiRouter.Group("/invitation_code")
+		invitationCodeRoute.Use(middleware.AdminAuth())
+		{
+			invitationCodeRoute.GET("/", controller.GetAllInvitationCodes)
+			invitationCodeRoute.GET("/search", controller.SearchInvitationCodes)
+			invitationCodeRoute.GET("/:id", controller.GetInvitationCode)
+			invitationCodeRoute.GET("/:id/usages", controller.GetInvitationCodeUsages)
+			invitationCodeRoute.POST("/", controller.AddInvitationCode)
+			invitationCodeRoute.PUT("/", controller.UpdateInvitationCode)
+			invitationCodeRoute.DELETE("/invalid", controller.DeleteInvalidInvitationCodes)
+			invitationCodeRoute.DELETE("/:id", controller.DeleteInvitationCode)
 		}
 		logRoute := apiRouter.Group("/log")
 		logRoute.GET("/", middleware.AdminAuth(), controller.GetAllLogs)

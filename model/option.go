@@ -44,6 +44,10 @@ func InitOptionMap() {
 	common.OptionMap["WeChatAuthEnabled"] = strconv.FormatBool(common.WeChatAuthEnabled)
 	common.OptionMap["TurnstileCheckEnabled"] = strconv.FormatBool(common.TurnstileCheckEnabled)
 	common.OptionMap["RegisterEnabled"] = strconv.FormatBool(common.RegisterEnabled)
+	common.OptionMap["InvitationCodeEnabled"] = strconv.FormatBool(common.InvitationCodeEnabled)
+	common.OptionMap["InvitationCodeOAuthRequired"] = strconv.FormatBool(common.InvitationCodeOAuthRequired)
+	common.OptionMap["InvitationCodeUserGenerateEnabled"] = strconv.FormatBool(common.InvitationCodeUserGenerateEnabled)
+	common.OptionMap["InvitationCodePolicy"] = setting.GetInvitationCodePolicyJSON()
 	common.OptionMap["AutomaticDisableChannelEnabled"] = strconv.FormatBool(common.AutomaticDisableChannelEnabled)
 	common.OptionMap["AutomaticEnableChannelEnabled"] = strconv.FormatBool(common.AutomaticEnableChannelEnabled)
 	common.OptionMap["LogConsumeEnabled"] = strconv.FormatBool(common.LogConsumeEnabled)
@@ -234,7 +238,7 @@ func updateOptionMap(key string, value string) (err error) {
 			common.ImageDownloadPermission = intValue
 		}
 	}
-	if strings.HasSuffix(key, "Enabled") || key == "DefaultCollapseSidebar" || key == "DefaultUseAutoGroup" || key == "SMTPForceAuthLogin" {
+	if strings.HasSuffix(key, "Enabled") || key == "DefaultCollapseSidebar" || key == "DefaultUseAutoGroup" || key == "SMTPForceAuthLogin" || key == "InvitationCodeOAuthRequired" {
 		boolValue := value == "true"
 		switch key {
 		case "PasswordRegisterEnabled":
@@ -255,6 +259,12 @@ func updateOptionMap(key string, value string) (err error) {
 			common.TurnstileCheckEnabled = boolValue
 		case "RegisterEnabled":
 			common.RegisterEnabled = boolValue
+		case "InvitationCodeEnabled":
+			common.InvitationCodeEnabled = boolValue
+		case "InvitationCodeOAuthRequired":
+			common.InvitationCodeOAuthRequired = boolValue
+		case "InvitationCodeUserGenerateEnabled":
+			common.InvitationCodeUserGenerateEnabled = boolValue
 		case "EmailDomainRestrictionEnabled":
 			common.EmailDomainRestrictionEnabled = boolValue
 		case "EmailAliasRestrictionEnabled":
@@ -487,6 +497,8 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateAudioCompletionRatioByJSONString(value)
 	case "TopUpLink":
 		common.TopUpLink = value
+	case "InvitationCodePolicy":
+		err = setting.UpdateInvitationCodePolicy(value)
 	//case "ChatLink":
 	//	common.ChatLink = value
 	//case "ChatLink2":

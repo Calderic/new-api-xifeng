@@ -82,6 +82,7 @@ func createRootAccountIfNeed() error {
 			DisplayName: "Root User",
 			AccessToken: nil,
 			Quota:       100000000,
+			CreatedTime: common.GetTimestamp(),
 		}
 		DB.Create(&rootUser)
 	}
@@ -262,6 +263,8 @@ func migrateDB() error {
 		&PasskeyCredential{},
 		&Option{},
 		&Redemption{},
+		&InvitationCode{},
+		&InvitationCodeUsage{},
 		&Ability{},
 		&Log{},
 		&Midjourney{},
@@ -310,6 +313,8 @@ func migrateDBFast() error {
 		{&PasskeyCredential{}, "PasskeyCredential"},
 		{&Option{}, "Option"},
 		{&Redemption{}, "Redemption"},
+		{&InvitationCode{}, "InvitationCode"},
+		{&InvitationCodeUsage{}, "InvitationCodeUsage"},
 		{&Ability{}, "Ability"},
 		{&Log{}, "Log"},
 		{&Midjourney{}, "Midjourney"},

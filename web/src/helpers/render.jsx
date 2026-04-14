@@ -69,6 +69,7 @@ import {
   CreditCard,
   Layers,
   Gift,
+  Ticket,
   User,
   Settings,
   CircleUser,
@@ -136,6 +137,8 @@ export function getLucideIcon(key, selected = false) {
       return <Layers {...commonProps} color={iconColor} />;
     case 'redemption':
       return <Gift {...commonProps} color={iconColor} />;
+    case 'invitation_code':
+      return <Ticket {...commonProps} color={iconColor} />;
     case 'user':
     case 'personal':
       return <User {...commonProps} color={iconColor} />;
