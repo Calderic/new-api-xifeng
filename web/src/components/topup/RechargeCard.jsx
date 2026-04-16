@@ -42,7 +42,6 @@ import {
   Wallet,
   BarChart2,
   TrendingUp,
-  Receipt,
   Sparkles,
 } from 'lucide-react';
 import { IconGift } from '@douyinfe/semi-icons';
@@ -632,13 +631,6 @@ const RechargeCard = ({
             <div className='text-xs'>{t('多种充值方式，安全便捷')}</div>
           </div>
         </div>
-        <Button
-          icon={<Receipt size={16} />}
-          theme='solid'
-          onClick={onOpenHistory}
-        >
-          {t('账单')}
-        </Button>
       </div>
 
       {shouldShowSubscription ? (

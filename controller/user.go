@@ -598,6 +598,17 @@ func UpdateUser(c *gin.Context) {
 	if updatedUser.Password == "$I_LOVE_U" {
 		updatedUser.Password = "" // rollback to what it should be
 	}
+	// Check email uniqueness (excluding the user being updated)
+	if updatedUser.Email != "" {
+		var emailCount int64
+		model.DB.Model(&model.User{}).Unscoped().
+			Where("email = ? AND id != ?", updatedUser.Email, updatedUser.Id).
+			Count(&emailCount)
+		if emailCount > 0 {
+			common.ApiErrorMsg(c, "邮箱已被其他用户使用")
+			return
+		}
+	}
 	updatePassword := updatedUser.Password != ""
 	if err := updatedUser.Edit(updatePassword); err != nil {
 		common.ApiError(c, err)

@@ -332,6 +332,30 @@ export const getUsersColumns = ({
       render: (text, record) => renderQuotaUsage(text, record, t),
     },
     {
+      title: t('邮箱'),
+      dataIndex: 'email',
+      width: 160,
+      render: (text) => {
+        if (!text) return <span>-</span>;
+        return (
+          <Tooltip content={text} position='top'>
+            <span
+              style={{
+                display: 'inline-block',
+                maxWidth: 140,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                verticalAlign: 'bottom',
+              }}
+            >
+              {text}
+            </span>
+          </Tooltip>
+        );
+      },
+    },
+    {
       title: t('分组'),
       dataIndex: 'group',
       render: (text, record, index) => {

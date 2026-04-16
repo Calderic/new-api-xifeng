@@ -27,6 +27,8 @@ import {
   Input,
   Tag,
   Modal,
+  Select,
+  DatePicker,
 } from '@douyinfe/semi-ui';
 import {
   IllustrationNoResult,
@@ -66,6 +68,8 @@ const TopupHistoryPage = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [keyword, setKeyword] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [dateRange, setDateRange] = useState([null, null]);
   const [invoiceModalVisible, setInvoiceModalVisible] = useState(false);
   const isMobile = useIsMobile();
 
@@ -73,10 +77,15 @@ const TopupHistoryPage = () => {
     setLoading(true);
     try {
       const base = isAdmin() ? '/api/user/topup' : '/api/user/topup/self';
-      const qs =
-        `p=${currentPage}&page_size=${currentPageSize}` +
-        (keyword ? `&keyword=${encodeURIComponent(keyword)}` : '');
-      const endpoint = `${base}?${qs}`;
+      const params = new URLSearchParams({
+        p: currentPage,
+        page_size: currentPageSize,
+      });
+      if (keyword) params.set('keyword', keyword);
+      if (statusFilter) params.set('status', statusFilter);
+      if (dateRange[0]) params.set('start_time', Math.floor(dateRange[0] / 1000));
+      if (dateRange[1]) params.set('end_time', Math.floor(dateRange[1] / 1000));
+      const endpoint = `${base}?${params.toString()}`;
       const res = await API.get(endpoint);
       const { success, message, data } = res.data;
       if (success) {
@@ -94,7 +103,7 @@ const TopupHistoryPage = () => {
 
   useEffect(() => {
     loadTopups(page, pageSize);
-  }, [page, pageSize, keyword]);
+  }, [page, pageSize, keyword, statusFilter, dateRange]);
 
   const handlePageChange = (currentPage) => {
     setPage(currentPage);
@@ -109,6 +118,52 @@ const TopupHistoryPage = () => {
     setKeyword(value);
     setPage(1);
   };
+
+  const handleStatusChange = (value) => {
+    setStatusFilter(value);
+    setPage(1);
+  };
+
+  const handleDateRangeChange = (dates) => {
+    setDateRange(dates && dates.length === 2 ? dates : [null, null]);
+    setPage(1);
+  };
+
+  const statusOptions = [
+    { label: t('全部状态'), value: '' },
+    { label: t('成功'), value: 'success' },
+    { label: t('待支付'), value: 'pending' },
+    { label: t('失败'), value: 'failed' },
+    { label: t('已过期'), value: 'expired' },
+  ];
+
+  const datePresets = [
+    {
+      text: t('今天'),
+      start: (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })(),
+      end: new Date(),
+    },
+    {
+      text: t('近 7 天'),
+      start: (() => { const d = new Date(); d.setDate(d.getDate() - 6); d.setHours(0,0,0,0); return d; })(),
+      end: new Date(),
+    },
+    {
+      text: t('本周'),
+      start: (() => { const d = new Date(); d.setDate(d.getDate() - d.getDay()); d.setHours(0,0,0,0); return d; })(),
+      end: new Date(),
+    },
+    {
+      text: t('近 30 天'),
+      start: (() => { const d = new Date(); d.setDate(d.getDate() - 29); d.setHours(0,0,0,0); return d; })(),
+      end: new Date(),
+    },
+    {
+      text: t('本月'),
+      start: (() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; })(),
+      end: new Date(),
+    },
+  ];
 
   // 管理员补单
   const handleAdminComplete = async (tradeNo) => {
@@ -246,7 +301,7 @@ const TopupHistoryPage = () => {
 
   return (
     <div className='mt-[60px] px-2'>
-      <div className='mb-3 flex items-center gap-2'>
+      <div className='mb-3 flex flex-wrap items-center gap-2'>
         <Button
           icon={<BadgeDollarSign size={14} />}
           theme='solid'
@@ -255,13 +310,28 @@ const TopupHistoryPage = () => {
         >
           {t('申请发票')}
         </Button>
+        <Select
+          value={statusFilter}
+          optionList={statusOptions}
+          onChange={handleStatusChange}
+          style={{ width: 130 }}
+        />
+        <DatePicker
+          type='dateTimeRange'
+          value={dateRange}
+          onChange={handleDateRangeChange}
+          placeholder={[t('开始时间'), t('结束时间')]}
+          style={{ width: isMobile ? '100%' : 380 }}
+          showClear
+          presets={datePresets}
+        />
         <Input
           prefix={<IconSearch />}
           placeholder={t('搜索订单号')}
           value={keyword}
           onChange={handleKeywordChange}
           showClear
-          style={{ maxWidth: 400 }}
+          style={{ width: 220 }}
         />
       </div>
       <Table
