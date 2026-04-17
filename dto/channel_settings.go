@@ -1,12 +1,30 @@
 package dto
 
+type ErrorFilterRule struct {
+	// 匹配条件（多条件 AND，同类条件内 OR）
+	StatusCodes     []int    `json:"status_codes,omitempty"`
+	MessageContains []string `json:"message_contains,omitempty"`
+	ErrorCodes      []string `json:"error_codes,omitempty"`
+
+	// 执行动作
+	Action string `json:"action"`
+
+	// Action=rewrite：透传上游状态码，改写返回消息
+	RewriteMessage string `json:"rewrite_message,omitempty"`
+
+	// Action=replace：完全拦截，自定义状态码和消息
+	ReplaceStatusCode int    `json:"replace_status_code,omitempty"`
+	ReplaceMessage    string `json:"replace_message,omitempty"`
+}
+
 type ChannelSettings struct {
-	ForceFormat            bool   `json:"force_format,omitempty"`
-	ThinkingToContent      bool   `json:"thinking_to_content,omitempty"`
-	Proxy                  string `json:"proxy"`
-	PassThroughBodyEnabled bool   `json:"pass_through_body_enabled,omitempty"`
-	SystemPrompt           string `json:"system_prompt,omitempty"`
-	SystemPromptOverride   bool   `json:"system_prompt_override,omitempty"`
+	ForceFormat            bool              `json:"force_format,omitempty"`
+	ThinkingToContent      bool              `json:"thinking_to_content,omitempty"`
+	Proxy                  string            `json:"proxy"`
+	PassThroughBodyEnabled bool              `json:"pass_through_body_enabled,omitempty"`
+	SystemPrompt           string            `json:"system_prompt,omitempty"`
+	SystemPromptOverride   bool              `json:"system_prompt_override,omitempty"`
+	ErrorFilterRules       []ErrorFilterRule `json:"error_filter_rules,omitempty"`
 }
 
 type VertexKeyType string
