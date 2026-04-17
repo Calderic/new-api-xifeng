@@ -59,8 +59,12 @@ type Diagnosis struct {
 }
 
 // GetClientIP returns the client IP used by security-sensitive modules.
-// Default behavior is conservative: trust no proxy headers and use RemoteAddr.
-// Admins may explicitly enable a trusted upstream IP header for reverse proxies/CDNs.
+// Behavior:
+//  1. If admin explicitly enabled TrustedIPHeader, use that header first (strict mode,
+//     only the configured header is trusted to prevent spoofing via other headers).
+//  2. Otherwise fall back to Gin's default c.ClientIP() which reads standard proxy
+//     headers (X-Forwarded-For / X-Real-IP) — same behavior as upstream new-api.
+//     This keeps deployments behind reverse proxies working without extra configuration.
 func GetClientIP(c *gin.Context) string {
 	if c == nil || c.Request == nil {
 		return ""
@@ -73,6 +77,14 @@ func GetClientIP(c *gin.Context) string {
 				return ip
 			}
 		}
+		// Strict mode enabled but configured header missing/invalid — fall back to
+		// RemoteAddr rather than other proxy headers to keep the spoofing protection.
+		return parseRemoteAddrIP(c.Request.RemoteAddr)
+	}
+	// Default (backward compatible): delegate to Gin's ClientIP which respects
+	// TrustedProxies / ForwardedByClientIP settings. Matches upstream new-api default.
+	if ip := c.ClientIP(); ip != "" {
+		return ip
 	}
 	return parseRemoteAddrIP(c.Request.RemoteAddr)
 }

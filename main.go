@@ -156,9 +156,10 @@ func main() {
 
 	// Initialize HTTP server
 	server := gin.New()
-	// Do not trust forwarded client-IP headers implicitly.
-	// Security-sensitive code resolves trusted upstream headers via runtime settings.
-	server.ForwardedByClientIP = false
+	// Keep Gin's default ForwardedByClientIP = true so deployments behind reverse
+	// proxies (Nginx / Cloudflare) see real client IPs via X-Forwarded-For out of
+	// the box. Admins who need stricter IP trust can enable "Trusted IP Header"
+	// in risk-control settings — GetClientIP will then only honor that header.
 	server.Use(gin.CustomRecovery(func(c *gin.Context, err any) {
 		common.SysLog(fmt.Sprintf("panic detected: %v", err))
 		c.JSON(http.StatusInternalServerError, gin.H{
