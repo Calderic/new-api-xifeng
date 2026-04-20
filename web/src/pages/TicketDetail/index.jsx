@@ -7,6 +7,7 @@ import TicketConversation from '../../components/ticket/TicketConversation';
 import TicketReplyBox from '../../components/ticket/TicketReplyBox';
 import TicketStatusTag from '../../components/ticket/TicketStatusTag';
 import InvoiceDetail from '../../components/ticket/InvoiceDetail';
+import RefundDetail from '../../components/ticket/RefundDetail';
 import {
   canCloseTicket,
   canReplyTicket,
@@ -27,6 +28,7 @@ const TicketDetail = () => {
   const [messages, setMessages] = useState([]);
   const [invoice, setInvoice] = useState(null);
   const [invoiceOrders, setInvoiceOrders] = useState([]);
+  const [refund, setRefund] = useState(null);
 
   const loadDetail = useCallback(async () => {
     if (!id) return;
@@ -39,6 +41,7 @@ const TicketDetail = () => {
         setMessages(data.messages || []);
         setInvoice(data.invoice || null);
         setInvoiceOrders(data.invoice_orders || []);
+        setRefund(data.refund || null);
       } else {
         showError(res.data?.message || t('工单详情加载失败'));
       }
@@ -164,6 +167,15 @@ const TicketDetail = () => {
         <InvoiceDetail
           invoice={invoice}
           orders={invoiceOrders}
+          readonly
+          t={t}
+        />
+      )}
+
+      {refund && (
+        <RefundDetail
+          refund={refund}
+          ticket={ticket}
           readonly
           t={t}
         />

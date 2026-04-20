@@ -183,6 +183,7 @@ func SetApiRouter(router *gin.Engine) {
 			ticketRoute.PUT("/self/:id/close", controller.CloseUserTicket)
 			ticketRoute.GET("/invoice/eligible_orders", controller.GetEligibleInvoiceOrders)
 			ticketRoute.POST("/invoice/", controller.CreateInvoiceTicket)
+			ticketRoute.POST("/refund/", controller.CreateRefundTicket)
 		}
 
 		ticketAdminRoute := apiRouter.Group("/ticket/admin")
@@ -194,6 +195,8 @@ func SetApiRouter(router *gin.Engine) {
 			ticketAdminRoute.PUT("/:id/status", controller.UpdateTicketStatus)
 			ticketAdminRoute.GET("/:id/invoice", controller.GetTicketInvoice)
 			ticketAdminRoute.PUT("/:id/invoice/status", controller.UpdateInvoiceStatus)
+			ticketAdminRoute.GET("/:id/refund", controller.GetTicketRefund)
+			ticketAdminRoute.PUT("/:id/refund/status", controller.UpdateRefundStatus)
 		}
 
 		optionRoute := apiRouter.Group("/option")

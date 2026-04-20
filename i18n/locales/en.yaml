@@ -151,6 +151,15 @@ ticket.invoice_order_duplicate: "Some selected top-up orders already have a non-
 ticket.invoice_company_empty: "Company name cannot be empty"
 ticket.invoice_tax_number_empty: "Tax number cannot be empty"
 ticket.invoice_email_empty: "Email cannot be empty"
+ticket.refund_not_found: "Refund request not found"
+ticket.refund_status_invalid: "Invalid refund status"
+ticket.refund_quota_invalid: "Refund quota must be greater than 0"
+ticket.refund_quota_exceed: "Refund quota cannot exceed current available quota"
+ticket.refund_payee_type_empty: "Please select a payee method"
+ticket.refund_payee_name_empty: "Payee name cannot be empty"
+ticket.refund_payee_account_empty: "Payee account cannot be empty"
+ticket.refund_payee_bank_empty: "Bank name cannot be empty"
+ticket.refund_contact_empty: "Contact info cannot be empty"
 
 # Payment messages
 payment.not_configured: "Payment information has not been configured by administrator"

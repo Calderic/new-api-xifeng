@@ -20,6 +20,7 @@ import TicketConversation from '../../components/ticket/TicketConversation';
 import TicketReplyBox from '../../components/ticket/TicketReplyBox';
 import TicketStatusTag from '../../components/ticket/TicketStatusTag';
 import InvoiceDetail from '../../components/ticket/InvoiceDetail';
+import RefundDetail from '../../components/ticket/RefundDetail';
 import {
   canReplyTicket,
   getTicketPriorityColor,
@@ -43,6 +44,7 @@ const AdminTicketDetail = () => {
   const [messages, setMessages] = useState([]);
   const [invoice, setInvoice] = useState(null);
   const [orders, setOrders] = useState([]);
+  const [refund, setRefund] = useState(null);
   const [statusValue, setStatusValue] = useState(1);
   const [priorityValue, setPriorityValue] = useState(2);
 
@@ -54,6 +56,15 @@ const AdminTicketDetail = () => {
     const data = res.data?.data || {};
     setInvoice(data.invoice || null);
     setOrders(data.orders || []);
+  }, [id, t]);
+
+  const loadRefundDetail = useCallback(async () => {
+    const res = await API.get(`/api/ticket/admin/${id}/refund`);
+    if (!res.data?.success) {
+      throw new Error(res.data?.message || t('退款详情加载失败'));
+    }
+    const data = res.data?.data || {};
+    setRefund(data.refund || null);
   }, [id, t]);
 
   const loadDetail = useCallback(async () => {
@@ -76,12 +87,17 @@ const AdminTicketDetail = () => {
         setInvoice(null);
         setOrders([]);
       }
+      if (data.ticket?.type === 'refund') {
+        await loadRefundDetail();
+      } else {
+        setRefund(null);
+      }
     } catch (error) {
       showError(error?.message || t('请求失败'));
     } finally {
       setLoading(false);
     }
-  }, [id, loadInvoiceDetail, t]);
+  }, [id, loadInvoiceDetail, loadRefundDetail, t]);
 
   useEffect(() => {
     loadDetail();
@@ -127,6 +143,19 @@ const AdminTicketDetail = () => {
     return false;
   };
 
+  const sendSystemMessage = async (content) => {
+    const text = String(content || '').trim();
+    if (!text) return false;
+    try {
+      const res = await API.post(`/api/ticket/admin/${id}/message`, {
+        content: text,
+      });
+      return Boolean(res.data?.success);
+    } catch (error) {
+      return false;
+    }
+  };
+
   const handleSaveStatus = async () => {
     setSaving(true);
     try {
@@ -139,6 +168,25 @@ const AdminTicketDetail = () => {
         await loadDetail();
       } else {
         showError(res.data?.message || t('更新工单状态失败'));
+      }
+    } catch (error) {
+      showError(t('请求失败'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRefundStatusChange = async (refundStatus) => {
+    setSaving(true);
+    try {
+      const res = await API.put(`/api/ticket/admin/${id}/refund/status`, {
+        refund_status: refundStatus,
+      });
+      if (res.data?.success) {
+        showSuccess(t('退款状态已更新'));
+        await loadDetail();
+      } else {
+        showError(res.data?.message || t('更新退款状态失败'));
       }
     } catch (error) {
       showError(t('请求失败'));
@@ -235,6 +283,17 @@ const AdminTicketDetail = () => {
           orders={orders}
           loading={saving}
           onStatusChange={handleInvoiceStatusChange}
+          t={t}
+        />
+      )}
+
+      {ticket?.type === 'refund' && (
+        <RefundDetail
+          refund={refund}
+          ticket={ticket}
+          loading={saving}
+          onStatusChange={handleRefundStatusChange}
+          onSendMessage={sendSystemMessage}
           t={t}
         />
       )}

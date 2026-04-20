@@ -47,6 +47,22 @@ type UpdateInvoiceStatusRequest struct {
 	InvoiceStatus int `json:"invoice_status"`
 }
 
+type CreateRefundTicketRequest struct {
+	Subject      string `json:"subject"`
+	Priority     int    `json:"priority"`
+	RefundQuota  int    `json:"refund_quota"`
+	PayeeType    string `json:"payee_type"`
+	PayeeName    string `json:"payee_name"`
+	PayeeAccount string `json:"payee_account"`
+	PayeeBank    string `json:"payee_bank"`
+	Contact      string `json:"contact"`
+	Reason       string `json:"reason"`
+}
+
+type UpdateRefundStatusRequest struct {
+	RefundStatus int `json:"refund_status"`
+}
+
 func getTicketCurrentUser(c *gin.Context) (*model.User, error) {
 	return model.GetUserById(c.GetInt("id"), false)
 }
@@ -104,6 +120,24 @@ func handleTicketError(c *gin.Context, err error) {
 		common.ApiErrorI18n(c, i18n.MsgTicketInvoiceTaxNumberEmpty)
 	case errors.Is(err, model.ErrTicketInvoiceEmailEmpty):
 		common.ApiErrorI18n(c, i18n.MsgTicketInvoiceEmailEmpty)
+	case errors.Is(err, model.ErrTicketRefundNotFound):
+		common.ApiErrorI18n(c, i18n.MsgTicketRefundNotFound)
+	case errors.Is(err, model.ErrTicketRefundStatusInvalid):
+		common.ApiErrorI18n(c, i18n.MsgTicketRefundStatusInvalid)
+	case errors.Is(err, model.ErrTicketRefundQuotaInvalid):
+		common.ApiErrorI18n(c, i18n.MsgTicketRefundQuotaInvalid)
+	case errors.Is(err, model.ErrTicketRefundQuotaExceed):
+		common.ApiErrorI18n(c, i18n.MsgTicketRefundQuotaExceed)
+	case errors.Is(err, model.ErrTicketRefundPayeeTypeEmpty):
+		common.ApiErrorI18n(c, i18n.MsgTicketRefundPayeeTypeEmpty)
+	case errors.Is(err, model.ErrTicketRefundPayeeNameEmpty):
+		common.ApiErrorI18n(c, i18n.MsgTicketRefundPayeeNameEmpty)
+	case errors.Is(err, model.ErrTicketRefundPayeeAccountEmpty):
+		common.ApiErrorI18n(c, i18n.MsgTicketRefundPayeeAccountEmpty)
+	case errors.Is(err, model.ErrTicketRefundPayeeBankEmpty):
+		common.ApiErrorI18n(c, i18n.MsgTicketRefundPayeeBankEmpty)
+	case errors.Is(err, model.ErrTicketRefundContactEmpty):
+		common.ApiErrorI18n(c, i18n.MsgTicketRefundContactEmpty)
 	default:
 		common.ApiError(c, err)
 	}
@@ -120,6 +154,7 @@ func buildTicketDetailResponse(ticket *model.Ticket) (gin.H, error) {
 		"messages":       messages,
 		"invoice":        nil,
 		"invoice_orders": []*model.TopUp{},
+		"refund":         nil,
 	}
 
 	if ticket.Type == model.TicketTypeInvoice {
@@ -130,6 +165,15 @@ func buildTicketDetailResponse(ticket *model.Ticket) (gin.H, error) {
 		if err == nil {
 			resp["invoice"] = invoice
 			resp["invoice_orders"] = orders
+		}
+	}
+	if ticket.Type == model.TicketTypeRefund {
+		refund, err := model.GetTicketRefundByTicketId(ticket.Id)
+		if err != nil && !errors.Is(err, model.ErrTicketRefundNotFound) {
+			return nil, err
+		}
+		if err == nil {
+			resp["refund"] = refund
 		}
 	}
 	return resp, nil
@@ -431,6 +475,84 @@ func GetTicketInvoice(c *gin.Context) {
 	common.ApiSuccess(c, gin.H{
 		"invoice": invoice,
 		"orders":  orders,
+	})
+}
+
+func CreateRefundTicket(c *gin.Context) {
+	var req CreateRefundTicketRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	currentUser, err := getTicketCurrentUser(c)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	ticket, refund, message, err := model.CreateRefundTicket(model.CreateRefundTicketParams{
+		UserId:       currentUser.Id,
+		Username:     currentUser.Username,
+		Subject:      req.Subject,
+		Priority:     req.Priority,
+		RefundQuota:  req.RefundQuota,
+		PayeeType:    req.PayeeType,
+		PayeeName:    req.PayeeName,
+		PayeeAccount: req.PayeeAccount,
+		PayeeBank:    req.PayeeBank,
+		Contact:      req.Contact,
+		Reason:       req.Reason,
+	})
+	if err != nil {
+		handleTicketError(c, err)
+		return
+	}
+
+	service.NotifyTicketCreatedToAdmin(ticket, message)
+	common.ApiSuccess(c, gin.H{
+		"ticket":  ticket,
+		"refund":  refund,
+		"message": message,
+	})
+}
+
+func GetTicketRefund(c *gin.Context) {
+	ticketId, ok := parseTicketID(c)
+	if !ok {
+		return
+	}
+	refund, err := model.GetTicketRefundByTicketId(ticketId)
+	if err != nil {
+		handleTicketError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"refund": refund,
+	})
+}
+
+func UpdateRefundStatus(c *gin.Context) {
+	ticketId, ok := parseTicketID(c)
+	if !ok {
+		return
+	}
+
+	var req UpdateRefundStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	refund, ticket, err := model.UpdateRefundStatus(ticketId, c.GetInt("id"), req.RefundStatus)
+	if err != nil {
+		handleTicketError(c, err)
+		return
+	}
+
+	common.ApiSuccess(c, gin.H{
+		"refund": refund,
+		"ticket": ticket,
 	})
 }
 

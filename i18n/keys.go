@@ -171,6 +171,15 @@ const (
 	MsgTicketInvoiceCompanyEmpty   = "ticket.invoice_company_empty"
 	MsgTicketInvoiceTaxNumberEmpty = "ticket.invoice_tax_number_empty"
 	MsgTicketInvoiceEmailEmpty     = "ticket.invoice_email_empty"
+	MsgTicketRefundNotFound        = "ticket.refund_not_found"
+	MsgTicketRefundStatusInvalid   = "ticket.refund_status_invalid"
+	MsgTicketRefundQuotaInvalid    = "ticket.refund_quota_invalid"
+	MsgTicketRefundQuotaExceed     = "ticket.refund_quota_exceed"
+	MsgTicketRefundPayeeTypeEmpty  = "ticket.refund_payee_type_empty"
+	MsgTicketRefundPayeeNameEmpty  = "ticket.refund_payee_name_empty"
+	MsgTicketRefundPayeeAccountEmpty = "ticket.refund_payee_account_empty"
+	MsgTicketRefundPayeeBankEmpty  = "ticket.refund_payee_bank_empty"
+	MsgTicketRefundContactEmpty    = "ticket.refund_contact_empty"
 )
 
 // Payment related messages

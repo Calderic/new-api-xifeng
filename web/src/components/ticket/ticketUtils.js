@@ -122,3 +122,44 @@ export const getTicketStatusOptions = (t, { allowClosed = true } = {}) => {
 export const canReplyTicket = (ticket) => Number(ticket?.status) !== 4;
 export const canCloseTicket = (ticket) => Number(ticket?.status) !== 4;
 
+export const getRefundStatusText = (status, t) => {
+  switch (Number(status)) {
+    case 1:
+      return t('待审核');
+    case 2:
+      return t('已退款');
+    case 3:
+      return t('已驳回');
+    default:
+      return t('未知状态');
+  }
+};
+
+export const getRefundStatusColor = (status) => {
+  switch (Number(status)) {
+    case 1:
+      return 'orange';
+    case 2:
+      return 'green';
+    case 3:
+      return 'red';
+    default:
+      return 'grey';
+  }
+};
+
+export const getRefundPayeeTypeText = (payeeType, t) => {
+  switch (String(payeeType || '').toLowerCase()) {
+    case 'alipay':
+      return t('支付宝');
+    case 'wechat':
+      return t('微信');
+    case 'bank':
+      return t('银行卡');
+    case 'other':
+      return t('其他');
+    default:
+      return '-';
+  }
+};
+
