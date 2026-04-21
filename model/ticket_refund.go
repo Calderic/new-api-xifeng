@@ -267,6 +267,20 @@ func CreateRefundTicket(params CreateRefundTicketParams) (*Ticket, *TicketRefund
 	return ticket, refund, message, nil
 }
 
+// SumUserPendingRefundQuota 汇总用户当前处于 Pending 状态的退款工单累计申请额度。
+//
+// 注意：这笔钱在退款工单提交时已通过 DecreaseUserQuota 从 user.quota 中**扣除**，
+// 并不是账户层面意义上的"冻结"。此处数字仅供管理员审计参考（"这位用户还有 X 额度在等审核"），
+// 切勿把它再加回到可用余额上。对应字段 TicketRefund.RefundQuota（与 FrozenQuota 同值，取任一即可）。
+func SumUserPendingRefundQuota(userId int) (int64, error) {
+	var total int64
+	err := DB.Model(&TicketRefund{}).
+		Where("user_id = ? AND refund_status = ?", userId, RefundStatusPending).
+		Select("COALESCE(SUM(refund_quota), 0)").
+		Scan(&total).Error
+	return total, err
+}
+
 func GetTicketRefundByTicketId(ticketId int) (*TicketRefund, error) {
 	var refund TicketRefund
 	if err := DB.Where("ticket_id = ?", ticketId).First(&refund).Error; err != nil {
@@ -303,9 +317,11 @@ type UpdateRefundStatusParams struct {
 // 工单/退款业务数据的状态流转在事务中，账户操作在事务前或事务后完成，保证：
 //   - 事务失败不会遗留已扣/已退的账户变更（通过补偿回滚）；
 //   - 账户变更经由系统统一路径，Redis、BatchUpdate、消费路径等都自动一致。
-func UpdateRefundStatus(params UpdateRefundStatusParams) (*TicketRefund, *Ticket, error) {
+//
+// 第三个返回值是更新前的工单主状态，供调用方判断是否需要发出状态变更通知。
+func UpdateRefundStatus(params UpdateRefundStatusParams) (*TicketRefund, *Ticket, int, error) {
 	if params.RefundStatus != RefundStatusRefunded && params.RefundStatus != RefundStatusRejected {
-		return nil, nil, ErrTicketRefundStatusInvalid
+		return nil, nil, 0, ErrTicketRefundStatusInvalid
 	}
 	mode := strings.TrimSpace(params.QuotaMode)
 	if mode == "" {
@@ -317,14 +333,14 @@ func UpdateRefundStatus(params UpdateRefundStatusParams) (*TicketRefund, *Ticket
 			// ok
 		case RefundQuotaModeSubtract:
 			if params.ActualRefundQuota <= 0 {
-				return nil, nil, ErrTicketRefundQuotaInvalid
+				return nil, nil, 0, ErrTicketRefundQuotaInvalid
 			}
 		case RefundQuotaModeOverride:
 			if params.ActualRefundQuota < 0 {
-				return nil, nil, ErrTicketRefundQuotaInvalid
+				return nil, nil, 0, ErrTicketRefundQuotaInvalid
 			}
 		default:
-			return nil, nil, ErrTicketRefundQuotaModeInvalid
+			return nil, nil, 0, ErrTicketRefundQuotaModeInvalid
 		}
 	}
 
@@ -332,21 +348,22 @@ func UpdateRefundStatus(params UpdateRefundStatusParams) (*TicketRefund, *Ticket
 	var refund TicketRefund
 	if err := DB.Where("ticket_id = ?", params.TicketId).First(&refund).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil, ErrTicketRefundNotFound
+			return nil, nil, 0, ErrTicketRefundNotFound
 		}
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	var ticket Ticket
 	if err := DB.First(&ticket, "id = ?", params.TicketId).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil, ErrTicketNotFound
+			return nil, nil, 0, ErrTicketNotFound
 		}
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	if refund.RefundStatus != RefundStatusPending {
-		return nil, nil, ErrTicketRefundNotPending
+		return nil, nil, 0, ErrTicketRefundNotPending
 	}
 
+	prevStatus := ticket.Status
 	originalQuota := refund.RefundQuota // 提交时已经扣除的金额
 	userId := refund.UserId
 
@@ -368,24 +385,24 @@ func UpdateRefundStatus(params UpdateRefundStatusParams) (*TicketRefund, *Ticket
 				var curQuota int
 				if err := DB.Model(&User{}).Where("id = ?", userId).
 					Select("quota").Find(&curQuota).Error; err != nil {
-					return nil, nil, err
+					return nil, nil, 0, err
 				}
 				if diff > curQuota {
-					return nil, nil, ErrTicketRefundQuotaExceed
+					return nil, nil, 0, ErrTicketRefundQuotaExceed
 				}
 				if err := DecreaseUserQuota(userId, diff, true); err != nil {
-					return nil, nil, err
+					return nil, nil, 0, err
 				}
 			} else if diff < 0 {
 				if err := IncreaseUserQuota(userId, -diff, true); err != nil {
-					return nil, nil, err
+					return nil, nil, 0, err
 				}
 			}
 		case RefundQuotaModeOverride:
 			// 先把已扣金额退还，相当于"当作没有过退款"；然后把余额覆盖为目标值。
 			if originalQuota > 0 {
 				if err := IncreaseUserQuota(userId, originalQuota, true); err != nil {
-					return nil, nil, err
+					return nil, nil, 0, err
 				}
 			}
 			// 读此时余额作为快照，再覆盖。
@@ -397,7 +414,7 @@ func UpdateRefundStatus(params UpdateRefundStatusParams) (*TicketRefund, *Ticket
 						"refund override snapshot failed and compensation decrease also failed: user=%d, quota=%d, err=%v",
 						userId, originalQuota, rErr))
 				}
-				return nil, nil, err
+				return nil, nil, 0, err
 			}
 			if err := DB.Model(&User{}).Where("id = ?", userId).
 				Update("quota", params.ActualRefundQuota).Error; err != nil {
@@ -407,7 +424,7 @@ func UpdateRefundStatus(params UpdateRefundStatusParams) (*TicketRefund, *Ticket
 						"refund override write failed and compensation decrease also failed: user=%d, quota=%d, err=%v",
 						userId, originalQuota, rErr))
 				}
-				return nil, nil, err
+				return nil, nil, 0, err
 			}
 			_ = InvalidateUserCache(userId)
 			finalQuotaForOverride = params.ActualRefundQuota
@@ -415,7 +432,7 @@ func UpdateRefundStatus(params UpdateRefundStatusParams) (*TicketRefund, *Ticket
 	case RefundStatusRejected:
 		if originalQuota > 0 {
 			if err := IncreaseUserQuota(userId, originalQuota, true); err != nil {
-				return nil, nil, err
+				return nil, nil, 0, err
 			}
 		}
 	}
@@ -472,7 +489,7 @@ func UpdateRefundStatus(params UpdateRefundStatusParams) (*TicketRefund, *Ticket
 				"refund status update failed and account compensation also failed: user=%d, ticket=%d, tx_err=%v, compensate_err=%v",
 				userId, ticket.Id, txErr, compensateErr))
 		}
-		return nil, nil, txErr
+		return nil, nil, 0, txErr
 	}
 
 	_ = InvalidateUserCache(userId)
@@ -512,7 +529,7 @@ func UpdateRefundStatus(params UpdateRefundStatusParams) (*TicketRefund, *Ticket
 				logger.LogQuota(originalQuota), ticket.Id), adminInfo)
 	}
 
-	return &refund, &ticket, nil
+	return &refund, &ticket, prevStatus, nil
 }
 
 // compensateAccountChange 反向执行 UpdateRefundStatus 在工单事务失败前已完成的账户变更。

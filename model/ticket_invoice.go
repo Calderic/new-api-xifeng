@@ -350,14 +350,17 @@ func GetTicketInvoiceDetail(ticketId int) (*TicketInvoice, []*TopUp, error) {
 	return invoice, orderTopUps(orderIds, topUps), nil
 }
 
-func UpdateInvoiceStatus(ticketId int, adminId int, invoiceStatus int) (*TicketInvoice, *Ticket, error) {
+// UpdateInvoiceStatus 管理员调整发票状态。
+// 第三个返回值是修改前的工单主状态，供调用方触发状态已变化通知。
+func UpdateInvoiceStatus(ticketId int, adminId int, invoiceStatus int) (*TicketInvoice, *Ticket, int, error) {
 	if !IsValidInvoiceStatus(invoiceStatus) {
-		return nil, nil, ErrTicketInvoiceStatusInvalid
+		return nil, nil, 0, ErrTicketInvoiceStatusInvalid
 	}
 
 	var (
-		invoice TicketInvoice
-		ticket  Ticket
+		invoice    TicketInvoice
+		ticket     Ticket
+		prevStatus int
 	)
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("ticket_id = ?", ticketId).First(&invoice).Error; err != nil {
@@ -372,6 +375,7 @@ func UpdateInvoiceStatus(ticketId int, adminId int, invoiceStatus int) (*TicketI
 			}
 			return err
 		}
+		prevStatus = ticket.Status
 
 		now := common.GetTimestamp()
 		invoiceUpdates := map[string]interface{}{
@@ -409,7 +413,7 @@ func UpdateInvoiceStatus(ticketId int, adminId int, invoiceStatus int) (*TicketI
 		return nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
-	return &invoice, &ticket, nil
+	return &invoice, &ticket, prevStatus, nil
 }

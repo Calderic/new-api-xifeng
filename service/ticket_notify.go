@@ -16,6 +16,15 @@ import (
 
 const ticketContentPreviewMaxLen = 500
 
+// 工单状态变更邮件的标题文案。集中在此，便于日后调整或走 i18n。
+const (
+	TicketStatusReasonGeneric         = "工单状态已更新"
+	TicketStatusReasonRefundApproved  = "你的退款申请已通过"
+	TicketStatusReasonRefundRejected  = "你的退款申请已被驳回"
+	TicketStatusReasonInvoiceIssued   = "发票已开具"
+	TicketStatusReasonInvoiceRejected = "发票申请未通过"
+)
+
 func ticketStatusLabel(status int) string {
 	switch status {
 	case model.TicketStatusOpen:
@@ -67,6 +76,13 @@ func ticketContentPreview(content string) string {
 
 func buildTicketIntro(ticket *model.Ticket, message *model.TicketMessage, isAdmin bool) string {
 	if isAdmin {
+		if message != nil {
+			replyBy := strings.TrimSpace(message.Username)
+			if replyBy == "" {
+				replyBy = strings.TrimSpace(ticket.Username)
+			}
+			return fmt.Sprintf("%s 在工单中追加了新的回复。", replyBy)
+		}
 		return fmt.Sprintf("来自 %s 的一条新工单，等你看看。", strings.TrimSpace(ticket.Username))
 	}
 	if message != nil {
@@ -197,6 +213,97 @@ func NotifyTicketReplyToUser(ticket *model.Ticket, message *model.TicketMessage)
 		// 走统一的限流 + 发送通道
 		if err := NotifyUser(user.Id, userEmail, userSetting, notify); err != nil {
 			common.SysLog(fmt.Sprintf("failed to send ticket reply notification to user %d (ticket=%d): %s", user.Id, ticket.Id, err.Error()))
+		}
+	})
+}
+
+// NotifyTicketReplyToAdmin 异步通知管理员：用户在已有工单中追加了回复
+func NotifyTicketReplyToAdmin(ticket *model.Ticket, message *model.TicketMessage) {
+	if ticket == nil || message == nil {
+		return
+	}
+	if !common.TicketNotifyEnabled {
+		return
+	}
+	recipients := parseAdminEmails(common.TicketAdminEmail)
+	if len(recipients) == 0 {
+		return
+	}
+	gopool.Go(func() {
+		vars := buildTicketVars(ticket, message, true, "工单有新回复")
+		subject, body := RenderEmailByKey(constant.EmailTemplateKeyTicketReplyAdmin, vars)
+		if subject == "" || body == "" {
+			return
+		}
+		for _, to := range recipients {
+			if err := common.SendEmail(subject, to, body); err != nil {
+				common.SysLog(fmt.Sprintf("failed to send ticket-reply email to admin %s (ticket=%d): %s", to, ticket.Id, err.Error()))
+			}
+		}
+	})
+}
+
+// buildStatusChangeDesc 构造 "旧状态 → 新状态" 的描述；若 prevStatus <= 0 或与当前相同，则只显示当前状态。
+func buildStatusChangeDesc(prevStatus, curStatus int) string {
+	cur := ticketStatusLabel(curStatus)
+	if prevStatus <= 0 || prevStatus == curStatus {
+		return cur
+	}
+	return fmt.Sprintf("%s → %s", ticketStatusLabel(prevStatus), cur)
+}
+
+// NotifyIfTicketStatusChanged 仅在 prevStatus != ticket.Status 时发出状态变更邮件；否则静默返回。
+// 用于控制器在每种状态推进（手动调整 / 发票处理 / 退款处理）后统一触达用户，避免重复模板。
+func NotifyIfTicketStatusChanged(ticket *model.Ticket, prevStatus int, reason string) {
+	if ticket == nil || prevStatus == ticket.Status {
+		return
+	}
+	NotifyTicketStatusChangedToUser(ticket, prevStatus, reason)
+}
+
+// NotifyTicketStatusChangedToUser 异步通知用户：工单状态发生变更（手动调整 / 发票处理 / 退款处理）。
+//
+// prevStatus 为状态变更前的工单主状态（Ticket.Status）；若传入 0 或与当前相同，则邮件中不显示 "→"。
+// reason 用于区分触发场景，会拼接到邮件抬头，便于用户快速识别是"人工调整"、"发票已开具"还是"退款已到账"等。
+func NotifyTicketStatusChangedToUser(ticket *model.Ticket, prevStatus int, reason string) {
+	if ticket == nil {
+		return
+	}
+	if !common.TicketNotifyEnabled {
+		return
+	}
+	// 状态未发生实际变更时，不再发送邮件，避免骚扰。
+	if prevStatus > 0 && prevStatus == ticket.Status {
+		return
+	}
+	gopool.Go(func() {
+		user, err := model.GetUserById(ticket.UserId, false)
+		if err != nil {
+			common.SysLog(fmt.Sprintf("failed to load user %d for ticket status email (ticket=%d): %s", ticket.UserId, ticket.Id, err.Error()))
+			return
+		}
+		userSetting := user.GetSetting()
+		userEmail := ResolveUserNotificationEmail(user, userSetting)
+		if userEmail == "" {
+			return
+		}
+
+		heading := "工单状态已更新"
+		if r := strings.TrimSpace(reason); r != "" {
+			heading = r
+		}
+		vars := buildTicketVars(ticket, nil, false, heading)
+		vars["intro"] = html.EscapeString(fmt.Sprintf("你的工单「%s」状态已更新为「%s」。",
+			strings.TrimSpace(ticket.Subject), ticketStatusLabel(ticket.Status)))
+		vars["status_change"] = html.EscapeString(buildStatusChangeDesc(prevStatus, ticket.Status))
+
+		subject, body := RenderEmailByKey(constant.EmailTemplateKeyTicketStatusUser, vars)
+		if subject == "" || body == "" {
+			return
+		}
+		notify := dto.NewNotify(dto.NotifyTypeTicketStatus, subject, body, nil)
+		if err := NotifyUser(user.Id, userEmail, userSetting, notify); err != nil {
+			common.SysLog(fmt.Sprintf("failed to send ticket status notification to user %d (ticket=%d): %s", user.Id, ticket.Id, err.Error()))
 		}
 	})
 }

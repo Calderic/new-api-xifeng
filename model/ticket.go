@@ -56,10 +56,11 @@ type Ticket struct {
 }
 
 type TicketQueryOptions struct {
-	UserId  int
-	Status  int
-	Type    string
-	Keyword string
+	UserId      int
+	Status      int
+	Type        string
+	Keyword     string
+	CompanyName string // 仅用于发票工单：按抬头（公司名称）模糊搜索；非发票工单会被忽略
 }
 
 type CreateTicketParams struct {
@@ -173,24 +174,38 @@ func CreateTicketWithMessage(params CreateTicketParams) (*Ticket, *TicketMessage
 }
 
 func applyTicketFilters(query *gorm.DB, options TicketQueryOptions) *gorm.DB {
+	ticketType := NormalizeTicketType(options.Type)
+	companyName := strings.TrimSpace(options.CompanyName)
+
+	// 发票抬头搜索只对发票工单生效：如果用户传了 CompanyName 又没指定类型，
+	// 自动加上 type=invoice 并 JOIN ticket_invoices 做 LIKE 匹配，避免在其他类型上误命中。
+	needInvoiceJoin := companyName != "" && (ticketType == "" || ticketType == TicketTypeInvoice)
+	if needInvoiceJoin {
+		query = query.Joins("LEFT JOIN ticket_invoices ON ticket_invoices.ticket_id = tickets.id")
+		ticketType = TicketTypeInvoice
+	}
+
 	if options.UserId > 0 {
-		query = query.Where("user_id = ?", options.UserId)
+		query = query.Where("tickets.user_id = ?", options.UserId)
 	}
 	if options.Status > 0 {
-		query = query.Where("status = ?", options.Status)
+		query = query.Where("tickets.status = ?", options.Status)
 	}
-	ticketType := NormalizeTicketType(options.Type)
 	if ticketType != "" {
-		query = query.Where("type = ?", ticketType)
+		query = query.Where("tickets.type = ?", ticketType)
 	}
 	keyword := strings.TrimSpace(options.Keyword)
 	if keyword != "" {
 		like := "%" + keyword + "%"
 		if ticketId, err := strconv.Atoi(keyword); err == nil {
-			query = query.Where("(id = ? OR subject LIKE ? OR username LIKE ?)", ticketId, like, like)
+			query = query.Where("(tickets.id = ? OR tickets.subject LIKE ? OR tickets.username LIKE ?)", ticketId, like, like)
 		} else {
-			query = query.Where("(subject LIKE ? OR username LIKE ?)", like, like)
+			query = query.Where("(tickets.subject LIKE ? OR tickets.username LIKE ?)", like, like)
 		}
+	}
+	if needInvoiceJoin {
+		like := "%" + companyName + "%"
+		query = query.Where("ticket_invoices.company_name LIKE ?", like)
 	}
 	return query
 }
@@ -211,7 +226,7 @@ func ListTickets(options TicketQueryOptions, pageInfo *common.PageInfo) (tickets
 		tx.Rollback()
 		return nil, 0, err
 	}
-	if err = query.Order("updated_time desc, id desc").
+	if err = query.Order("tickets.updated_time desc, tickets.id desc").
 		Limit(pageInfo.GetPageSize()).
 		Offset(pageInfo.GetStartIdx()).
 		Find(&tickets).Error; err != nil {
@@ -251,13 +266,18 @@ func GetTicketMessages(ticketId int) (messages []*TicketMessage, err error) {
 	return messages, err
 }
 
-func AddTicketMessage(ticketId int, userId int, username string, role int, content string) (*TicketMessage, *Ticket, error) {
+// AddTicketMessage 追加一条工单回复并按角色自动推进状态。
+// 第三个返回值是追加前的工单主状态，供调用方判定是否需要对外发送状态变更通知。
+func AddTicketMessage(ticketId int, userId int, username string, role int, content string) (*TicketMessage, *Ticket, int, error) {
 	content = strings.TrimSpace(content)
 	if content == "" {
-		return nil, nil, ErrTicketContentEmpty
+		return nil, nil, 0, ErrTicketContentEmpty
 	}
 
-	var ticket Ticket
+	var (
+		ticket     Ticket
+		prevStatus int
+	)
 	now := common.GetTimestamp()
 	message := &TicketMessage{
 		TicketId:    ticketId,
@@ -278,6 +298,7 @@ func AddTicketMessage(ticketId int, userId int, username string, role int, conte
 		if ticket.Status == TicketStatusClosed {
 			return ErrTicketClosed
 		}
+		prevStatus = ticket.Status
 		if err := tx.Create(message).Error; err != nil {
 			return err
 		}
@@ -305,9 +326,9 @@ func AddTicketMessage(ticketId int, userId int, username string, role int, conte
 		return nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
-	return message, &ticket, nil
+	return message, &ticket, prevStatus, nil
 }
 
 func CloseUserTicket(ticketId int, userId int) (*Ticket, error) {
@@ -345,8 +366,13 @@ func CloseUserTicket(ticketId int, userId int) (*Ticket, error) {
 	return &ticket, nil
 }
 
-func UpdateTicketStatus(ticketId int, adminId int, status *int, priority *int) (*Ticket, error) {
-	var ticket Ticket
+// UpdateTicketStatus 管理员调整工单状态/优先级。
+// 第二个返回值是修改前的主状态，便于调用方仅在状态真正变化时触发通知。
+func UpdateTicketStatus(ticketId int, adminId int, status *int, priority *int) (*Ticket, int, error) {
+	var (
+		ticket     Ticket
+		prevStatus int
+	)
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.First(&ticket, "id = ?", ticketId).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -354,6 +380,7 @@ func UpdateTicketStatus(ticketId int, adminId int, status *int, priority *int) (
 			}
 			return err
 		}
+		prevStatus = ticket.Status
 
 		now := common.GetTimestamp()
 		updates := map[string]interface{}{
@@ -389,7 +416,7 @@ func UpdateTicketStatus(ticketId int, adminId int, status *int, priority *int) (
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return &ticket, nil
+	return &ticket, prevStatus, nil
 }

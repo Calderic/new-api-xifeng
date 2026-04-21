@@ -281,7 +281,7 @@ func CreateUserTicketMessage(c *gin.Context) {
 		return
 	}
 
-	message, ticket, err := model.AddTicketMessage(
+	message, ticket, _, err := model.AddTicketMessage(
 		ticketId,
 		currentUser.Id,
 		currentUser.Username,
@@ -292,6 +292,9 @@ func CreateUserTicketMessage(c *gin.Context) {
 		handleTicketError(c, err)
 		return
 	}
+	// 用户追加回复：仅提醒管理员有新消息。
+	// 用户自己触发的"已解决 → 处理中"是用户自己刚刚的操作，对用户端不再重复发邮件，避免骚扰。
+	service.NotifyTicketReplyToAdmin(ticket, message)
 	common.ApiSuccess(c, gin.H{
 		"ticket":  ticket,
 		"message": message,
@@ -320,9 +323,10 @@ func GetAllTickets(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 
 	tickets, total, err := model.ListTickets(model.TicketQueryOptions{
-		Status:  status,
-		Type:    ticketType,
-		Keyword: c.Query("keyword"),
+		Status:      status,
+		Type:        ticketType,
+		Keyword:     c.Query("keyword"),
+		CompanyName: c.Query("company_name"),
 	}, pageInfo)
 	if err != nil {
 		common.ApiError(c, err)
@@ -370,7 +374,7 @@ func CreateAdminTicketMessage(c *gin.Context) {
 		return
 	}
 
-	message, ticket, err := model.AddTicketMessage(
+	message, ticket, _, err := model.AddTicketMessage(
 		ticketId,
 		currentUser.Id,
 		currentUser.Username,
@@ -381,6 +385,8 @@ func CreateAdminTicketMessage(c *gin.Context) {
 		handleTicketError(c, err)
 		return
 	}
+	// 管理员回复会自动将 Open -> Processing，此时用户端收到的"回复"邮件已能反映最新状态，
+	// 故不再额外发一封"状态变更"邮件，避免同一事件产生两封邮件。
 	service.NotifyTicketReplyToUser(ticket, message)
 	common.ApiSuccess(c, gin.H{
 		"ticket":  ticket,
@@ -404,10 +410,14 @@ func UpdateTicketStatus(c *gin.Context) {
 		return
 	}
 
-	ticket, err := model.UpdateTicketStatus(ticketId, c.GetInt("id"), req.Status, req.Priority)
+	ticket, prevStatus, err := model.UpdateTicketStatus(ticketId, c.GetInt("id"), req.Status, req.Priority)
 	if err != nil {
 		handleTicketError(c, err)
 		return
+	}
+	// 只改优先级时不触发状态变更通知，避免骚扰。
+	if req.Status != nil {
+		service.NotifyIfTicketStatusChanged(ticket, prevStatus, service.TicketStatusReasonGeneric)
 	}
 	common.ApiSuccess(c, ticket)
 }
@@ -560,16 +570,109 @@ func UpdateRefundStatus(c *gin.Context) {
 		params.ActualRefundQuota = *req.ActualRefundQuota
 	}
 
-	refund, ticket, err := model.UpdateRefundStatus(params)
+	refund, ticket, prevStatus, err := model.UpdateRefundStatus(params)
 	if err != nil {
 		handleTicketError(c, err)
 		return
 	}
 
+	reason := service.TicketStatusReasonGeneric
+	switch req.RefundStatus {
+	case model.RefundStatusRefunded:
+		reason = service.TicketStatusReasonRefundApproved
+	case model.RefundStatusRejected:
+		reason = service.TicketStatusReasonRefundRejected
+	}
+	service.NotifyIfTicketStatusChanged(ticket, prevStatus, reason)
+
 	common.ApiSuccess(c, gin.H{
 		"refund": refund,
 		"ticket": ticket,
 	})
+}
+
+// TicketUserProfileResponse 是 /ticket/admin/:id/user-profile 的返回结构。
+// 运营视角下的必要信息：余额、近期消费日志、模型使用 TopN、是否有待审核的退款申请；敏感字段不暴露。
+type TicketUserProfileResponse struct {
+	UserId             int                `json:"user_id"`
+	Username           string             `json:"username"`
+	DisplayName        string             `json:"display_name"`
+	Email              string             `json:"email"`
+	Role               int                `json:"role"`
+	Status             int                `json:"status"`
+	Group              string             `json:"group"`
+	CreatedTime        int64              `json:"created_time"`
+	Quota              int                `json:"quota"`
+	UsedQuota          int                `json:"used_quota"`
+	PendingRefundQuota int64              `json:"pending_refund_quota"` // 待审核退款额度（已从余额扣除）
+	RequestCount       int                `json:"request_count"`
+	RecentLogs         []*model.Log       `json:"recent_logs"`
+	ModelUsage         []*model.QuotaData `json:"model_usage"`
+}
+
+const (
+	ticketUserRecentLogLimit  = 15
+	ticketUserModelUsageLimit = 8
+	ticketUserModelUsageDays  = 30
+)
+
+// GetTicketUserProfile 管理员在工单详情页查看用户画像。
+// 任一分项加载失败不影响其它字段返回。
+func GetTicketUserProfile(c *gin.Context) {
+	ticketId, ok := parseTicketID(c)
+	if !ok {
+		return
+	}
+	ticket, err := model.GetTicketById(ticketId)
+	if err != nil {
+		handleTicketError(c, err)
+		return
+	}
+
+	user, err := model.GetUserById(ticket.UserId, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	resp := TicketUserProfileResponse{
+		UserId:       user.Id,
+		Username:     user.Username,
+		DisplayName:  user.DisplayName,
+		Email:        user.Email,
+		Role:         user.Role,
+		Status:       user.Status,
+		Group:        user.Group,
+		CreatedTime:  user.CreatedTime,
+		Quota:        user.Quota,
+		UsedQuota:    user.UsedQuota,
+		RequestCount: user.RequestCount,
+	}
+
+	if pending, pErr := model.SumUserPendingRefundQuota(user.Id); pErr != nil {
+		common.SysLog(fmt.Sprintf("ticket user profile: failed to sum pending refund quota for user %d: %s", user.Id, pErr.Error()))
+	} else {
+		resp.PendingRefundQuota = pending
+	}
+
+	recentLogs, _, logErr := model.GetUserLogs(
+		user.Id, model.LogTypeConsume, 0, 0, "", "",
+		0, ticketUserRecentLogLimit, "", "",
+	)
+	if logErr != nil {
+		common.SysLog(fmt.Sprintf("ticket user profile: failed to fetch recent logs for user %d: %s", user.Id, logErr.Error()))
+		recentLogs = nil
+	}
+	resp.RecentLogs = recentLogs
+
+	since := common.GetTimestamp() - int64(ticketUserModelUsageDays)*24*3600
+	usage, usageErr := model.GetUserModelUsageTopN(user.Id, since, ticketUserModelUsageLimit)
+	if usageErr != nil {
+		common.SysLog(fmt.Sprintf("ticket user profile: failed to aggregate model usage for user %d: %s", user.Id, usageErr.Error()))
+	}
+	resp.ModelUsage = usage
+
+	common.ApiSuccess(c, resp)
 }
 
 func UpdateInvoiceStatus(c *gin.Context) {
@@ -584,11 +687,20 @@ func UpdateInvoiceStatus(c *gin.Context) {
 		return
 	}
 
-	invoice, ticket, err := model.UpdateInvoiceStatus(ticketId, c.GetInt("id"), req.InvoiceStatus)
+	invoice, ticket, prevStatus, err := model.UpdateInvoiceStatus(ticketId, c.GetInt("id"), req.InvoiceStatus)
 	if err != nil {
 		handleTicketError(c, err)
 		return
 	}
+
+	reason := service.TicketStatusReasonGeneric
+	switch req.InvoiceStatus {
+	case model.InvoiceStatusIssued:
+		reason = service.TicketStatusReasonInvoiceIssued
+	case model.InvoiceStatusRejected:
+		reason = service.TicketStatusReasonInvoiceRejected
+	}
+	service.NotifyIfTicketStatusChanged(ticket, prevStatus, reason)
 
 	common.ApiSuccess(c, gin.H{
 		"invoice": invoice,

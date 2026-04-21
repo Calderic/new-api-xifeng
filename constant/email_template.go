@@ -5,9 +5,11 @@ package constant
 //	EmailTemplate.<key>.subject
 //	EmailTemplate.<key>.body
 const (
-	EmailTemplateKeyTicketCreatedAdmin = "ticket_created_admin"
-	EmailTemplateKeyTicketReplyUser    = "ticket_reply_user"
-	EmailTemplateKeyPaymentSuccessUser = "payment_success_user"
+	EmailTemplateKeyTicketCreatedAdmin  = "ticket_created_admin"
+	EmailTemplateKeyTicketReplyUser     = "ticket_reply_user"
+	EmailTemplateKeyTicketReplyAdmin    = "ticket_reply_admin"
+	EmailTemplateKeyTicketStatusUser    = "ticket_status_user"
+	EmailTemplateKeyPaymentSuccessUser  = "payment_success_user"
 	EmailTemplateKeyPaymentSuccessAdmin = "payment_success_admin"
 )
 
@@ -101,6 +103,49 @@ func EmailTemplateSpecs() []EmailTemplateSpec {
 				varActionURL, varActionLabel,
 			},
 			DefaultSubject: "工单 #{{ticket_id}} 有新回复",
+			DefaultBody:    defaultBody,
+		},
+		{
+			Key:         EmailTemplateKeyTicketReplyAdmin,
+			Name:        "工单回复-通知管理员",
+			Description: "用户回复工单后，发送给管理员的邮件。",
+			Variables: []EmailTemplateVariable{
+				varSystemName, varServerAddr, varHeading,
+				{Name: "intro", Description: "正文开头说明", Sample: "alice 在工单中追问了新问题。"},
+				{Name: "ticket_id", Description: "工单编号", Sample: "1024"},
+				{Name: "ticket_subject", Description: "工单主题", Sample: "充值没到账"},
+				{Name: "ticket_type", Description: "工单类型", Sample: "普通工单"},
+				{Name: "ticket_priority", Description: "工单优先级", Sample: "中"},
+				{Name: "ticket_status", Description: "工单状态", Sample: "处理中"},
+				{Name: "ticket_username", Description: "提交用户名", Sample: "alice"},
+				{Name: "reply_username", Description: "回复人用户名", Sample: "alice"},
+				{Name: "reply_time", Description: "回复时间", Sample: "2026-04-17 22:00:00"},
+				varInfoTable, varPreview,
+				{Name: "content_preview_block", Description: "完整内容预览块", Sample: `<p style="margin:16px 0 4px;color:#333;font-weight:600;">内容预览</p><div style="padding:12px;background-color:#f5f5f5;border-radius:4px;">这里是用户回复…</div>`},
+				varActionURL, varActionLabel,
+			},
+			DefaultSubject: "工单 #{{ticket_id}} 用户追加了回复",
+			DefaultBody:    defaultBody,
+		},
+		{
+			Key:         EmailTemplateKeyTicketStatusUser,
+			Name:        "工单状态变更-通知用户",
+			Description: "管理员调整工单状态/优先级，或发票/退款工单进入新的处理阶段时，发送给工单提交用户的邮件。",
+			Variables: []EmailTemplateVariable{
+				varSystemName, varServerAddr, varHeading,
+				{Name: "intro", Description: "正文开头说明", Sample: "你的工单状态已更新。"},
+				{Name: "ticket_id", Description: "工单编号", Sample: "1024"},
+				{Name: "ticket_subject", Description: "工单主题", Sample: "充值没到账"},
+				{Name: "ticket_type", Description: "工单类型", Sample: "普通工单"},
+				{Name: "ticket_priority", Description: "工单优先级", Sample: "中"},
+				{Name: "ticket_status", Description: "工单状态", Sample: "已解决"},
+				{Name: "ticket_username", Description: "提交用户名", Sample: "alice"},
+				{Name: "status_change", Description: "状态变更摘要", Sample: "处理中 → 已解决"},
+				varInfoTable,
+				{Name: "content_preview_block", Description: "（状态变更邮件通常为空）", Sample: ""},
+				varActionURL, varActionLabel,
+			},
+			DefaultSubject: "工单 #{{ticket_id}} 状态已更新为 {{ticket_status}}",
 			DefaultBody:    defaultBody,
 		},
 		{

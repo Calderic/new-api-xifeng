@@ -15,6 +15,7 @@ const (
 	NotifyTypeChannelTest    = "channel_test"
 	NotifyTypeTicketCreated  = "ticket_created"
 	NotifyTypeTicketReply    = "ticket_reply"
+	NotifyTypeTicketStatus   = "ticket_status"
 	NotifyTypePaymentSuccess = "payment_success"
 )
 

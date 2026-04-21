@@ -21,6 +21,7 @@ import TicketReplyBox from '../../components/ticket/TicketReplyBox';
 import TicketStatusTag from '../../components/ticket/TicketStatusTag';
 import InvoiceDetail from '../../components/ticket/InvoiceDetail';
 import RefundDetail from '../../components/ticket/RefundDetail';
+import TicketUserProfilePanel from '../../components/ticket/TicketUserProfilePanel';
 import {
   canReplyTicket,
   getTicketPriorityColor,
@@ -253,6 +254,14 @@ const AdminTicketDetail = () => {
               </Text>
             </div>
             <Space wrap>
+              {ticket?.user_id ? (
+                <TicketUserProfilePanel
+                  ticketId={id}
+                  username={ticket?.username}
+                  userId={ticket?.user_id}
+                  t={t}
+                />
+              ) : null}
               <Select
                 value={statusValue}
                 style={{ width: 160 }}
@@ -332,7 +341,9 @@ const TicketAdmin = () => {
   const statusFilter = searchParams.get('status') || '';
   const typeFilter = searchParams.get('type') || '';
   const searchKeyword = searchParams.get('keyword') || '';
+  const companyNameParam = searchParams.get('company_name') || '';
   const [keyword, setKeyword] = useState(searchKeyword);
+  const [companyName, setCompanyName] = useState(companyNameParam);
 
   const updateSearchParams = useCallback(
     (patch) => {
@@ -374,10 +385,17 @@ const TicketAdmin = () => {
     (value) => updateSearchParams({ keyword: value, p: '' }),
     [updateSearchParams],
   );
+  const setCompanyNameFilter = useCallback(
+    (value) => updateSearchParams({ company_name: value, p: '' }),
+    [updateSearchParams],
+  );
 
   useEffect(() => {
     setKeyword(searchKeyword);
   }, [searchKeyword]);
+  useEffect(() => {
+    setCompanyName(companyNameParam);
+  }, [companyNameParam]);
 
   const loadTickets = useCallback(async () => {
     setLoading(true);
@@ -389,6 +407,7 @@ const TicketAdmin = () => {
           status: statusFilter || undefined,
           type: typeFilter || undefined,
           keyword: searchKeyword || undefined,
+          company_name: companyNameParam || undefined,
         },
       });
       if (res.data?.success) {
@@ -403,7 +422,7 @@ const TicketAdmin = () => {
     } finally {
       setLoading(false);
     }
-  }, [activePage, pageSize, searchKeyword, statusFilter, typeFilter, t]);
+  }, [activePage, pageSize, searchKeyword, companyNameParam, statusFilter, typeFilter, t]);
 
   useEffect(() => {
     if (id) return;
@@ -468,6 +487,17 @@ const TicketAdmin = () => {
               onChange={setKeyword}
               onEnterPress={() => setSearchKeyword(keyword)}
             />
+            {(typeFilter === '' || typeFilter === 'invoice') && (
+              <Input
+                value={companyName}
+                placeholder={t('发票抬头（公司名称）')}
+                style={{ width: 220 }}
+                prefix={<IconSearch />}
+                showClear
+                onChange={setCompanyName}
+                onEnterPress={() => setCompanyNameFilter(companyName)}
+              />
+            )}
           </Space>
           <Space wrap>
             <Select
@@ -480,7 +510,13 @@ const TicketAdmin = () => {
               value={typeFilter}
               optionList={typeOptions}
               style={{ width: 160 }}
-              onChange={setTypeFilter}
+              onChange={(value) => {
+                // 切到非发票类型时清理抬头搜索，避免残留参数不生效造成用户困惑。
+                if (value && value !== 'invoice' && companyNameParam) {
+                  setCompanyNameFilter('');
+                }
+                setTypeFilter(value);
+              }}
             />
           </Space>
         </div>
