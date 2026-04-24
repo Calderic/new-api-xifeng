@@ -25,7 +25,7 @@ import { ChevronLeft } from 'lucide-react';
 import { useSidebarCollapsed } from '../../hooks/common/useSidebarCollapsed';
 import { useSidebar } from '../../hooks/common/useSidebar';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
-import { isAdmin, isRoot, showError } from '../../helpers';
+import { isAdmin, isRoot, isTicketStaff, showError } from '../../helpers';
 import SkeletonWrapper from './components/SkeletonWrapper';
 
 import { Nav, Divider, Button } from '@douyinfe/semi-ui';
@@ -178,7 +178,8 @@ const SiderBar = ({ onNavigate = () => { } }) => {
         text: t('工单管理'),
         itemKey: 'ticket_admin',
         to: '/ticket_admin',
-        className: isAdmin() ? '' : 'tableHiddle',
+        // 工单管理对客服（role=5）也可见；其它管理员菜单项仍仅对 role>=10 可见。
+        className: isTicketStaff() ? '' : 'tableHiddle',
       },
       {
         text: t('模型管理'),
@@ -231,7 +232,7 @@ const SiderBar = ({ onNavigate = () => { } }) => {
     });
 
     return filteredItems;
-  }, [isAdmin(), isRoot(), t, isModuleVisible]);
+  }, [isAdmin(), isRoot(), isTicketStaff(), t, isModuleVisible]);
 
   const chatMenuItems = useMemo(() => {
     const items = [
@@ -438,7 +439,7 @@ const SiderBar = ({ onNavigate = () => { } }) => {
         type='sidebar'
         className=''
         collapsed={collapsed}
-        showAdmin={isAdmin()}
+        showAdmin={isTicketStaff()}
       >
         <Nav
           className='sidebar-nav'
@@ -515,8 +516,8 @@ const SiderBar = ({ onNavigate = () => { } }) => {
             </>
           )}
 
-          {/* 管理员区域 - 只在管理员时显示且配置允许时显示 */}
-          {isAdmin() && hasSectionVisibleModules('admin') && (
+          {/* 管理员区域 - 管理员完整可见；客服仅看得到工单管理一项（在 adminItems 过滤中控制）。 */}
+          {isTicketStaff() && hasSectionVisibleModules('admin') && (
             <>
               <Divider className='sidebar-divider' />
               <div>

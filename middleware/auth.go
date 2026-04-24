@@ -224,6 +224,15 @@ func AdminAuth() func(c *gin.Context) {
 	}
 }
 
+// TicketStaffAuth 允许角色 >= 客服（RoleCustomerServiceUser）访问。
+// 用于工单后台接口：既覆盖原有管理员（role=10+），也放行专门的客服账号（role=5）。
+// 是否允许具体用户处理某张工单，由 controller / service 根据分配规则再做一次细粒度判断。
+func TicketStaffAuth() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		authHelper(c, common.RoleCustomerServiceUser)
+	}
+}
+
 func RootAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		authHelper(c, common.RoleRootUser)

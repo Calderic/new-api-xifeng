@@ -197,14 +197,18 @@ func SetApiRouter(router *gin.Engine) {
 			ticketAttachmentDownloadRoute.GET("/:id", controller.DownloadTicketAttachment)
 		}
 
+		// 工单后台路由：客服（role=5）可以访问，客服仅能处理分配给自己或所在组未分配的工单，
+		// 这层可见性在 controller 里通过 ensureTicketAccessible 二次校验。
 		ticketAdminRoute := apiRouter.Group("/ticket/admin")
-		ticketAdminRoute.Use(middleware.AdminAuth())
+		ticketAdminRoute.Use(middleware.TicketStaffAuth())
 		{
 			ticketAdminRoute.GET("/", controller.GetAllTickets)
+			ticketAdminRoute.GET("/staff", controller.ListTicketStaff)
 			ticketAdminRoute.GET("/:id", controller.GetTicket)
 			ticketAdminRoute.GET("/:id/user-profile", controller.GetTicketUserProfile)
 			ticketAdminRoute.POST("/:id/message", controller.CreateAdminTicketMessage)
 			ticketAdminRoute.PUT("/:id/status", controller.UpdateTicketStatus)
+			ticketAdminRoute.PUT("/:id/assign", controller.AssignTicket)
 			ticketAdminRoute.GET("/:id/invoice", controller.GetTicketInvoice)
 			ticketAdminRoute.PUT("/:id/invoice/status", controller.UpdateInvoiceStatus)
 			ticketAdminRoute.GET("/:id/refund", controller.GetTicketRefund)

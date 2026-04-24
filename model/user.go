@@ -298,6 +298,34 @@ func SearchUsers(keyword string, group string, startIdx int, num int) ([]*User, 
 	return users, total, nil
 }
 
+// TicketStaffUser 是工单分配候选的精简视图：字段仅包含前端下拉/徽章所需的内容。
+// 不暴露敏感字段（password / access_token / setting 等）。
+type TicketStaffUser struct {
+	Id          int    `json:"id"`
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
+	Role        int    `json:"role"`
+	Group       string `json:"group" gorm:"column:group"`
+}
+
+// GetTicketStaffUsers 返回所有可以处理工单的账号（客服 + 管理员 + 超级管理员），
+// 仅限已启用状态。列表按角色降序 + Id 升序排序，便于前端分组渲染。
+//
+// 用 commonGroupCol 包装 group 关键字，兼容 MySQL / SQLite（反引号）与 PostgreSQL（双引号）。
+func GetTicketStaffUsers() ([]*TicketStaffUser, error) {
+	var users []*TicketStaffUser
+	err := DB.Table("users").
+		Select("id, username, display_name, email, role, "+commonGroupCol).
+		Where("role >= ? AND status = ?", common.RoleCustomerServiceUser, common.UserStatusEnabled).
+		Order("role desc, id asc").
+		Scan(&users).Error
+	if err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
 func GetUserById(id int, selectAll bool) (*User, error) {
 	if id == 0 {
 		return nil, errors.New("id 为空！")

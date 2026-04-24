@@ -9,6 +9,7 @@ const (
 	EmailTemplateKeyTicketReplyUser     = "ticket_reply_user"
 	EmailTemplateKeyTicketReplyAdmin    = "ticket_reply_admin"
 	EmailTemplateKeyTicketStatusUser    = "ticket_status_user"
+	EmailTemplateKeyTicketAssigned      = "ticket_assigned"
 	EmailTemplateKeyPaymentSuccessUser  = "payment_success_user"
 	EmailTemplateKeyPaymentSuccessAdmin = "payment_success_admin"
 )
@@ -146,6 +147,28 @@ func EmailTemplateSpecs() []EmailTemplateSpec {
 				varActionURL, varActionLabel,
 			},
 			DefaultSubject: "工单 #{{ticket_id}} 状态已更新为 {{ticket_status}}",
+			DefaultBody:    defaultBody,
+		},
+		{
+			Key:         EmailTemplateKeyTicketAssigned,
+			Name:        "工单分配-通知客服",
+			Description: "工单被自动或手动分配到指定客服/管理员后发送的通知；同时抄送管理员收件邮箱。",
+			Variables: []EmailTemplateVariable{
+				varSystemName, varServerAddr, varHeading,
+				{Name: "intro", Description: "正文开头说明", Sample: "工单 #1024「充值没到账」已分配给你，请及时处理。"},
+				{Name: "ticket_id", Description: "工单编号", Sample: "1024"},
+				{Name: "ticket_subject", Description: "工单主题", Sample: "充值没到账"},
+				{Name: "ticket_type", Description: "工单类型", Sample: "普通工单"},
+				{Name: "ticket_priority", Description: "工单优先级", Sample: "中"},
+				{Name: "ticket_status", Description: "工单状态", Sample: "待处理"},
+				{Name: "ticket_username", Description: "提交用户名", Sample: "alice"},
+				{Name: "ticket_created_at", Description: "创建时间", Sample: "2026-04-17 21:30:00"},
+				{Name: "assignee_line", Description: "分配情况说明", Sample: "已分配给客服 bob"},
+				varInfoTable,
+				{Name: "content_preview_block", Description: "（分配通知默认为空）", Sample: ""},
+				varActionURL, varActionLabel,
+			},
+			DefaultSubject: "工单 #{{ticket_id}} 已分配给你",
 			DefaultBody:    defaultBody,
 		},
 		{

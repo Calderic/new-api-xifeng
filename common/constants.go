@@ -155,14 +155,33 @@ const (
 )
 
 const (
-	RoleGuestUser  = 0
-	RoleCommonUser = 1
-	RoleAdminUser  = 10
-	RoleRootUser   = 100
+	RoleGuestUser           = 0
+	RoleCommonUser          = 1
+	RoleCustomerServiceUser = 5 // 客服：只能访问工单相关管理功能
+	RoleAdminUser           = 10
+	RoleRootUser            = 100
 )
 
 func IsValidateRole(role int) bool {
-	return role == RoleGuestUser || role == RoleCommonUser || role == RoleAdminUser || role == RoleRootUser
+	return role == RoleGuestUser || role == RoleCommonUser || role == RoleCustomerServiceUser || role == RoleAdminUser || role == RoleRootUser
+}
+
+// RoleLabel 返回角色的中文可读名称，主要用于日志/通知场景。
+func RoleLabel(role int) string {
+	switch role {
+	case RoleGuestUser:
+		return "访客"
+	case RoleCommonUser:
+		return "普通用户"
+	case RoleCustomerServiceUser:
+		return "客服"
+	case RoleAdminUser:
+		return "管理员"
+	case RoleRootUser:
+		return "超级管理员"
+	default:
+		return "未知"
+	}
 }
 
 var (

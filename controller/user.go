@@ -462,6 +462,20 @@ func calculateUserPermissions(userRole int) map[string]interface{} {
 				"setting": false, // 管理员不能访问系统设置
 			},
 		}
+	} else if userRole == common.RoleCustomerServiceUser {
+		// 客服：仅工单管理与用户管理只读视图。其它管理员功能一律锁闭。
+		permissions["sidebar_settings"] = true
+		permissions["sidebar_modules"] = map[string]interface{}{
+			"admin": map[string]interface{}{
+				"channel":         false,
+				"models":          false,
+				"redemption":      false,
+				"invitation_code": false,
+				"setting":         false,
+				"user":            false,
+				// ticket_admin 保持开启，由默认配置提供
+			},
+		}
 	} else {
 		// 普通用户只能设置个人功能，不包含管理员区域
 		permissions["sidebar_settings"] = true
@@ -526,6 +540,18 @@ func generateDefaultSidebarConfig(userRole int) string {
 			"user":            true,
 			"ticket_admin":    true,
 			"setting":         true,
+		}
+	} else if userRole == common.RoleCustomerServiceUser {
+		// 客服：仅开放工单后台入口；其它管理员功能一律关闭。
+		defaultConfig["admin"] = map[string]interface{}{
+			"enabled":         true,
+			"channel":         false,
+			"models":          false,
+			"redemption":      false,
+			"invitation_code": false,
+			"user":            false,
+			"ticket_admin":    true,
+			"setting":         false,
 		}
 	}
 	// 普通用户不包含admin区域
@@ -953,6 +979,36 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 		user.Role = common.RoleCommonUser
+	case "set_role":
+		// set_role 允许管理员直接选择目标角色，是 promote/demote 的通用替代。
+		// 规则：
+		//   - 只能在"自己角色以下"的范围内操作（RoleRootUser 例外可以任意设置）
+		//   - 不能把 Root 用户降级（只能手动在 DB 中改动）
+		//   - 目标角色必须是合法值
+		if user.Role == common.RoleRootUser {
+			common.ApiErrorI18n(c, i18n.MsgUserCannotDemoteRootUser)
+			return
+		}
+		target := req.Value
+		if !common.IsValidateRole(target) || target == common.RoleGuestUser {
+			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+			return
+		}
+		// 权限：提升到 >= 自身角色只允许 Root
+		if target >= myRole && myRole != common.RoleRootUser {
+			common.ApiErrorI18n(c, i18n.MsgUserAdminCannotPromote)
+			return
+		}
+		if user.Role == target {
+			// 幂等：无需再次写库
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "",
+				"data":    model.User{Role: user.Role, Status: user.Status},
+			})
+			return
+		}
+		user.Role = target
 	case "add_quota":
 		adminName := c.GetString("username")
 		adminId := c.GetInt("id")
@@ -1010,7 +1066,7 @@ func ManageUser(c *gin.Context) {
 	// 避免在 Redis TTL 过期前仍使用旧状态（尤其是禁用后仍可发起请求的问题）。
 	// InvalidateUserCache 会让下一次 GetUserCache 从数据库重新加载，
 	// InvalidateUserTokensCache 则确保令牌侧的缓存也同步刷新。
-	if req.Action == "disable" || req.Action == "promote" || req.Action == "demote" {
+	if req.Action == "disable" || req.Action == "promote" || req.Action == "demote" || req.Action == "set_role" {
 		if err := model.InvalidateUserCache(user.Id); err != nil {
 			common.SysLog(fmt.Sprintf("failed to invalidate user cache for user %d: %s", user.Id, err.Error()))
 		}

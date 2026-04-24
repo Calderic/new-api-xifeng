@@ -30,6 +30,7 @@ var (
 	ErrTicketContentEmpty          = errors.New("ticket content empty")
 	ErrTicketInvalidStatus         = errors.New("ticket invalid status")
 	ErrTicketInvalidType           = errors.New("ticket invalid type")
+	ErrTicketAssigneeInvalid       = errors.New("ticket assignee invalid")
 	ErrTicketInvoiceNotFound       = errors.New("ticket invoice not found")
 	ErrTicketInvoiceStatusInvalid  = errors.New("ticket invoice status invalid")
 	ErrTicketInvoiceOrderEmpty     = errors.New("ticket invoice order empty")
@@ -41,14 +42,17 @@ var (
 )
 
 type Ticket struct {
-	Id          int            `json:"id"`
-	UserId      int            `json:"user_id" gorm:"index;not null"`
-	Username    string         `json:"username" gorm:"type:varchar(64)"`
-	Subject     string         `json:"subject" gorm:"type:varchar(255);not null"`
-	Type        string         `json:"type" gorm:"type:varchar(32);index;default:'general'"`
-	Status      int            `json:"status" gorm:"type:int;index;default:1"`
-	Priority    int            `json:"priority" gorm:"type:int;default:2"`
-	AdminId     int            `json:"admin_id" gorm:"type:int;default:0"`
+	Id          int    `json:"id"`
+	UserId      int    `json:"user_id" gorm:"index;not null"`
+	Username    string `json:"username" gorm:"type:varchar(64)"`
+	Subject     string `json:"subject" gorm:"type:varchar(255);not null"`
+	Type        string `json:"type" gorm:"type:varchar(32);index;default:'general'"`
+	Status      int    `json:"status" gorm:"type:int;index;default:1"`
+	Priority    int    `json:"priority" gorm:"type:int;default:2"`
+	AdminId     int    `json:"admin_id" gorm:"type:int;default:0"`
+	// AssigneeId 当前分配到的客服/管理员用户 ID。0 表示尚未分配（待认领）。
+	// 与 AdminId 分开：AdminId 会被"最后一次回复的管理员"覆盖，而 AssigneeId 是明确的负责人。
+	AssigneeId  int            `json:"assignee_id" gorm:"type:int;index;default:0"`
 	CreatedTime int64          `json:"created_time" gorm:"bigint"`
 	UpdatedTime int64          `json:"updated_time" gorm:"bigint;index"`
 	ClosedTime  int64          `json:"closed_time" gorm:"bigint;default:0"`
@@ -61,6 +65,15 @@ type TicketQueryOptions struct {
 	Type        string
 	Keyword     string
 	CompanyName string // 仅用于发票工单：按抬头（公司名称）模糊搜索；非发票工单会被忽略
+	// AssigneeId 用于客服视角：只返回分配给指定用户的工单；值为 -1 表示"未分配"。
+	// 0 表示不按分配过滤。
+	AssigneeId int
+	// IncludeUnassigned 仅在 AssigneeId > 0 时生效：为 true 时额外返回"未分配"的工单
+	// （组成客服的"我的 + 待认领"视图）。
+	IncludeUnassigned bool
+	// AssigneeIn 返回 AssigneeId 在给定列表中的工单；常与 IncludeUnassigned 搭配使用，
+	// 用于展示"本组池"。空列表表示不启用。
+	AssigneeIn []int
 }
 
 type CreateTicketParams struct {
@@ -197,6 +210,19 @@ func applyTicketFilters(query *gorm.DB, options TicketQueryOptions) *gorm.DB {
 	}
 	if ticketType != "" {
 		query = query.Where("tickets.type = ?", ticketType)
+	}
+	// 分配过滤：支持"仅某人"、"某人 + 未分配"、"一组人 + 未分配"三种模式。
+	switch {
+	case options.AssigneeId == -1:
+		query = query.Where("tickets.assignee_id = 0")
+	case options.AssigneeId > 0 && options.IncludeUnassigned:
+		query = query.Where("(tickets.assignee_id = ? OR tickets.assignee_id = 0)", options.AssigneeId)
+	case options.AssigneeId > 0:
+		query = query.Where("tickets.assignee_id = ?", options.AssigneeId)
+	case len(options.AssigneeIn) > 0 && options.IncludeUnassigned:
+		query = query.Where("(tickets.assignee_id IN ? OR tickets.assignee_id = 0)", options.AssigneeIn)
+	case len(options.AssigneeIn) > 0:
+		query = query.Where("tickets.assignee_id IN ?", options.AssigneeIn)
 	}
 	keyword := strings.TrimSpace(options.Keyword)
 	if keyword != "" {
@@ -353,13 +379,19 @@ func AddTicketMessage(ticketId int, userId int, username string, role int, conte
 			return err
 		}
 
-		// 管理员首次接手后自动进入处理中，用户在已解决状态追问时也会回到处理中。
+		// 工单工作人员（客服或管理员）首次接手后自动进入处理中；
+		// 若工单尚未分配（assignee_id=0），同一事务里"谁先回复谁认领"。
+		// 普通用户在已解决状态追问时也会把工单回退到处理中。
 		updates := map[string]interface{}{
 			"updated_time": now,
 		}
-		if role >= common.RoleAdminUser {
+		if role >= common.RoleCustomerServiceUser {
 			updates["admin_id"] = userId
 			ticket.AdminId = userId
+			if ticket.AssigneeId == 0 {
+				updates["assignee_id"] = userId
+				ticket.AssigneeId = userId
+			}
 			if ticket.Status == TicketStatusOpen {
 				updates["status"] = TicketStatusProcessing
 				ticket.Status = TicketStatusProcessing
@@ -469,4 +501,73 @@ func UpdateTicketStatus(ticketId int, adminId int, status *int, priority *int) (
 		return nil, 0, err
 	}
 	return &ticket, prevStatus, nil
+}
+
+// AssignTicket 将工单分配到指定用户。assigneeId 为 0 表示"取消分配，回到待认领池"。
+// 并发安全：使用 assignee_id 作为乐观锁条件，避免两个管理员在同一时刻指定为不同的人。
+// 返回的第三个值是本次调用前的 AssigneeId，调用方可据此判断是否发生了变化并决定是否通知。
+func AssignTicket(ticketId int, assigneeId int, expectedAssigneeId *int) (*Ticket, int, error) {
+	var (
+		ticket     Ticket
+		prevAssign int
+	)
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&ticket, "id = ?", ticketId).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrTicketNotFound
+			}
+			return err
+		}
+		prevAssign = ticket.AssigneeId
+		if expectedAssigneeId != nil && ticket.AssigneeId != *expectedAssigneeId {
+			// 乐观锁失败：说明另一个管理员/客服已经抢先分配过
+			return ErrTicketAssigneeInvalid
+		}
+		if ticket.AssigneeId == assigneeId {
+			// 已经是目标负责人，幂等返回
+			return nil
+		}
+		now := common.GetTimestamp()
+		if err := tx.Model(&Ticket{}).Where("id = ? AND assignee_id = ?", ticket.Id, prevAssign).
+			Updates(map[string]interface{}{
+				"assignee_id":  assigneeId,
+				"updated_time": now,
+			}).Error; err != nil {
+			return err
+		}
+		ticket.AssigneeId = assigneeId
+		ticket.UpdatedTime = now
+		return nil
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	return &ticket, prevAssign, nil
+}
+
+// CountAssigneeLoad 统计一批候选负责人当前分别承担多少活跃工单（非已关闭），
+// 用于"最少负载"分配策略。返回 map[userId]count；未出现的候选表示计数为 0。
+func CountAssigneeLoad(candidateIds []int) (map[int]int, error) {
+	result := make(map[int]int, len(candidateIds))
+	if len(candidateIds) == 0 {
+		return result, nil
+	}
+	type row struct {
+		AssigneeId int `gorm:"column:assignee_id"`
+		Cnt        int `gorm:"column:cnt"`
+	}
+	var rows []row
+	err := DB.Model(&Ticket{}).
+		Select("assignee_id, COUNT(*) AS cnt").
+		Where("assignee_id IN ?", candidateIds).
+		Where("status <> ?", TicketStatusClosed).
+		Group("assignee_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		result[r.AssigneeId] = r.Cnt
+	}
+	return result, nil
 }

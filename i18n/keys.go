@@ -182,6 +182,7 @@ const (
 	MsgTicketRefundContactEmpty    = "ticket.refund_contact_empty"
 	MsgTicketRefundNotPending      = "ticket.refund_not_pending"
 	MsgTicketRefundQuotaModeInvalid = "ticket.refund_quota_mode_invalid"
+	MsgTicketAssigneeInvalid        = "ticket.assignee_invalid"
 )
 
 // Payment related messages

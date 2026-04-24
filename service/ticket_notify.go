@@ -159,7 +159,8 @@ func buildTicketVars(ticket *model.Ticket, message *model.TicketMessage, isAdmin
 	}
 }
 
-// NotifyTicketCreatedToAdmin 异步通知管理员：用户创建了新工单
+// NotifyTicketCreatedToAdmin 异步通知管理员：用户创建了新工单。
+// 若工单已完成自动分配，邮件中会附带"已分配给客服 xxx"一行；否则提示"待认领"。
 func NotifyTicketCreatedToAdmin(ticket *model.Ticket, message *model.TicketMessage) {
 	if ticket == nil {
 		return
@@ -173,6 +174,8 @@ func NotifyTicketCreatedToAdmin(ticket *model.Ticket, message *model.TicketMessa
 	}
 	gopool.Go(func() {
 		vars := buildTicketVars(ticket, message, true, "新工单")
+		// 叠加分配信息：已分配 -> 显示客服名；未分配 -> "待认领"
+		vars["assignee_line"] = html.EscapeString(buildAssigneeLine(ticket))
 		subject, body := RenderEmailByKey(constant.EmailTemplateKeyTicketCreatedAdmin, vars)
 		if subject == "" || body == "" {
 			return
@@ -183,6 +186,87 @@ func NotifyTicketCreatedToAdmin(ticket *model.Ticket, message *model.TicketMessa
 			}
 		}
 	})
+}
+
+// NotifyTicketAssigned 异步通知被分配到的客服，以及抄送管理员邮箱。
+// 触发时机：
+//   - 自动分配成功后
+//   - 管理员手动指派后（assigneeId 发生变化）
+//
+// 抄送管理员是为了让整个工单流转对管理员透明，无需额外配置邮箱（客服用自己的邮箱）。
+func NotifyTicketAssigned(ticket *model.Ticket, assigneeId int) {
+	if ticket == nil || assigneeId <= 0 {
+		return
+	}
+	if !common.TicketNotifyEnabled {
+		return
+	}
+	gopool.Go(func() {
+		assignee, err := model.GetUserById(assigneeId, false)
+		if err != nil {
+			common.SysLog(fmt.Sprintf("ticket assigned notify: failed to load user %d: %s", assigneeId, err.Error()))
+			return
+		}
+		assigneeSetting := assignee.GetSetting()
+		assigneeEmail := ResolveUserNotificationEmail(assignee, assigneeSetting)
+
+		heading := "你有一条新的工单待处理"
+		vars := buildTicketVars(ticket, nil, true, heading)
+		vars["assignee_line"] = html.EscapeString(buildAssigneeLine(ticket))
+		vars["intro"] = html.EscapeString(fmt.Sprintf(
+			"工单 #%d「%s」已分配给你，请及时处理。",
+			ticket.Id, strings.TrimSpace(ticket.Subject)))
+
+		subject, body := RenderEmailByKey(constant.EmailTemplateKeyTicketAssigned, vars)
+		if subject == "" || body == "" {
+			// 未配置模板时使用最简备用文案，不让通知丢失
+			subject = fmt.Sprintf("[%s] 你有一条新的工单待处理 #%d", common.SystemNameOrDefault(), ticket.Id)
+			body = fmt.Sprintf(
+				`<p>%s</p><p>工单主题：%s</p><p>请前往管理后台查看并处理。</p>`,
+				html.EscapeString(vars["intro"]),
+				html.EscapeString(strings.TrimSpace(ticket.Subject)))
+		}
+
+		if assigneeEmail != "" {
+			if err := common.SendEmail(subject, assigneeEmail, body); err != nil {
+				common.SysLog(fmt.Sprintf("failed to send ticket-assigned email to assignee %d (ticket=%d): %s",
+					assigneeId, ticket.Id, err.Error()))
+			}
+		}
+
+		// 同时抄送管理员列表，正文里会包含"已分配给客服 xxx"这一行
+		recipients := parseAdminEmails(common.TicketAdminEmail)
+		for _, to := range recipients {
+			if to == assigneeEmail {
+				continue
+			}
+			if err := common.SendEmail(subject, to, body); err != nil {
+				common.SysLog(fmt.Sprintf("failed to send ticket-assigned email to admin %s (ticket=%d): %s",
+					to, ticket.Id, err.Error()))
+			}
+		}
+	})
+}
+
+// buildAssigneeLine 构造 "已分配给客服 xxx" 或 "待认领" 的可读文字。
+// 不做 HTML 转义；调用方在写入 vars 时自行 escape。
+func buildAssigneeLine(ticket *model.Ticket) string {
+	if ticket.AssigneeId <= 0 {
+		return "当前状态：待认领"
+	}
+	assignee, err := model.GetUserById(ticket.AssigneeId, false)
+	if err != nil || assignee == nil {
+		return fmt.Sprintf("已分配给用户 ID #%d", ticket.AssigneeId)
+	}
+	name := strings.TrimSpace(assignee.DisplayName)
+	if name == "" {
+		name = strings.TrimSpace(assignee.Username)
+	}
+	if name == "" {
+		name = fmt.Sprintf("#%d", assignee.Id)
+	}
+	roleLabel := common.RoleLabel(assignee.Role)
+	return fmt.Sprintf("已分配给%s %s", roleLabel, name)
 }
 
 // NotifyTicketReplyToUser 异步通知用户：管理员回复了工单

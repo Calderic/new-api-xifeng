@@ -95,6 +95,7 @@ func InitOptionMap() {
 	common.OptionMap["TicketAttachmentCOSSecretId"] = setting.TicketAttachmentCOSSecretId
 	common.OptionMap["TicketAttachmentCOSSecretKey"] = setting.TicketAttachmentCOSSecretKey
 	common.OptionMap["TicketAttachmentCOSCustomDomain"] = setting.TicketAttachmentCOSCustomDomain
+	common.OptionMap["TicketAssignConfig"] = setting.TicketAssignConfig2JSONString()
 	common.OptionMap["PaymentNotifyUserEnabled"] = strconv.FormatBool(common.PaymentNotifyUserEnabled)
 	common.OptionMap["PaymentNotifyAdminEnabled"] = strconv.FormatBool(common.PaymentNotifyAdminEnabled)
 	common.OptionMap["PaymentAdminEmail"] = common.PaymentAdminEmail
@@ -452,6 +453,10 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.TicketAttachmentCOSSecretKey = value
 	case "TicketAttachmentCOSCustomDomain":
 		setting.TicketAttachmentCOSCustomDomain = value
+	case "TicketAssignConfig":
+		if err := setting.UpdateTicketAssignConfigFromJSON(value); err != nil {
+			common.SysLog("failed to update ticket assign config: " + err.Error())
+		}
 	case "PaymentAdminEmail":
 		common.PaymentAdminEmail = value
 	case "ServerAddress":

@@ -97,6 +97,34 @@ func getTicketCurrentUser(c *gin.Context) (*model.User, error) {
 	return model.GetUserById(c.GetInt("id"), false)
 }
 
+// ensureTicketAccessible 针对"工单处理人"（客服 / 管理员）侧的接口做二次鉴权：
+//   - 管理员及以上：全部放行
+//   - 客服：只能访问分配给自己的工单，或工单所在组的未分配工单
+//
+// 不适用于工单提交用户访问自己工单的接口（那一侧走 model.GetUserTicketById）。
+func ensureTicketAccessible(c *gin.Context, ticket *model.Ticket) bool {
+	role := c.GetInt("role")
+	if role >= common.RoleAdminUser {
+		return true
+	}
+	currentUserId := c.GetInt("id")
+	// 自己是负责人 —— 最常见路径
+	if ticket.AssigneeId == currentUserId {
+		return true
+	}
+	// 同组未分配池 —— 允许客服抢单/回复
+	if ticket.AssigneeId == 0 {
+		pool := service.ResolveAssigneeIdsForUser(currentUserId, role)
+		for _, uid := range pool {
+			if uid == currentUserId {
+				return true
+			}
+		}
+	}
+	common.ApiErrorI18n(c, i18n.MsgForbidden)
+	return false
+}
+
 func parseTicketID(c *gin.Context) (int, bool) {
 	ticketId, err := strconv.Atoi(c.Param("id"))
 	if err != nil || ticketId <= 0 {
@@ -172,6 +200,8 @@ func handleTicketError(c *gin.Context, err error) {
 		common.ApiErrorI18n(c, i18n.MsgTicketRefundNotPending)
 	case errors.Is(err, model.ErrTicketRefundQuotaModeInvalid):
 		common.ApiErrorI18n(c, i18n.MsgTicketRefundQuotaModeInvalid)
+	case errors.Is(err, model.ErrTicketAssigneeInvalid):
+		common.ApiErrorI18n(c, i18n.MsgTicketAssigneeInvalid)
 	case errors.Is(err, model.ErrAttachmentNotFound):
 		common.ApiErrorMsg(c, "attachment not found")
 	case errors.Is(err, model.ErrAttachmentForbidden):
@@ -251,6 +281,11 @@ func CreateTicket(c *gin.Context) {
 	if err != nil {
 		handleTicketError(c, err)
 		return
+	}
+	// 自动分配 -> 先分配再发"已创建"通知，邮件里能带上"已分配给 xxx"一行。
+	service.AutoAssignTicketOnCreate(ticket.Id, ticket.Type, service.NotifyTicketAssigned)
+	if refreshed, refreshErr := model.GetTicketById(ticket.Id); refreshErr == nil {
+		ticket = refreshed
 	}
 	service.NotifyTicketCreatedToAdmin(ticket, message)
 	common.ApiSuccess(c, gin.H{
@@ -360,20 +395,51 @@ func CloseUserTicket(c *gin.Context) {
 	common.ApiSuccess(c, ticket)
 }
 
+// GetAllTickets 管理员/客服视角的工单列表。
+// 可见范围：
+//   - 管理员及以上：全部工单；支持 scope=mine / scope=unassigned 过滤
+//   - 客服：自己被分配的工单 + 同组待认领工单；scope=mine 仅自己的；scope=unassigned 仅本组未分配
 func GetAllTickets(c *gin.Context) {
 	ticketType, ok := normalizeTicketTypeOrError(c, c.Query("type"))
 	if !ok {
 		return
 	}
 	status, _ := strconv.Atoi(c.Query("status"))
+	scope := strings.ToLower(strings.TrimSpace(c.Query("scope"))) // "" / mine / unassigned
 	pageInfo := common.GetPageQuery(c)
 
-	tickets, total, err := model.ListTickets(model.TicketQueryOptions{
+	opts := model.TicketQueryOptions{
 		Status:      status,
 		Type:        ticketType,
 		Keyword:     c.Query("keyword"),
 		CompanyName: c.Query("company_name"),
-	}, pageInfo)
+	}
+
+	role := c.GetInt("role")
+	currentUserId := c.GetInt("id")
+	if role >= common.RoleAdminUser {
+		// 管理员视角：默认全部；scope 仅作过滤
+		switch scope {
+		case "mine":
+			opts.AssigneeId = currentUserId
+		case "unassigned":
+			opts.AssigneeId = -1
+		}
+	} else {
+		// 客服视角：限定在同组池内
+		switch scope {
+		case "mine":
+			opts.AssigneeId = currentUserId
+		case "unassigned":
+			opts.AssigneeId = -1
+			opts.AssigneeIn = service.ResolveAssigneeIdsForUser(currentUserId, role)
+		default:
+			opts.AssigneeIn = service.ResolveAssigneeIdsForUser(currentUserId, role)
+			opts.IncludeUnassigned = true
+		}
+	}
+
+	tickets, total, err := model.ListTickets(opts, pageInfo)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -384,6 +450,91 @@ func GetAllTickets(c *gin.Context) {
 	common.ApiSuccess(c, pageInfo)
 }
 
+// AssignTicket 管理员/客服主动指派或认领一张工单。
+// Body: { "assignee_id": 0|<user_id>, "expected_assignee_id": null|<int> }
+// assignee_id=0 表示取消分配、放回待认领池（仅管理员可做）。
+// expected_assignee_id 用于乐观锁：客户端上一次看到的 assignee，用来避免并发覆盖。
+func AssignTicket(c *gin.Context) {
+	ticketId, ok := parseTicketID(c)
+	if !ok {
+		return
+	}
+	var req struct {
+		AssigneeId         int  `json:"assignee_id"`
+		ExpectedAssigneeId *int `json:"expected_assignee_id,omitempty"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	if req.AssigneeId < 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	role := c.GetInt("role")
+	currentUserId := c.GetInt("id")
+
+	// 权限校验：
+	// - 管理员可以指派任意人 / 取消分配
+	// - 客服只能把工单分配给自己（"认领"）或在同组内转派，且不能取消分配
+	if role < common.RoleAdminUser {
+		if req.AssigneeId == 0 {
+			common.ApiErrorI18n(c, i18n.MsgForbidden)
+			return
+		}
+		allowed := req.AssigneeId == currentUserId
+		if !allowed {
+			pool := service.ResolveAssigneeIdsForUser(currentUserId, role)
+			for _, uid := range pool {
+				if uid == req.AssigneeId {
+					allowed = true
+					break
+				}
+			}
+		}
+		if !allowed {
+			common.ApiErrorI18n(c, i18n.MsgForbidden)
+			return
+		}
+	}
+
+	// 目标用户必须是有效的客服或管理员（assignee_id=0 时跳过校验）
+	if req.AssigneeId > 0 {
+		target, err := model.GetUserById(req.AssigneeId, false)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if target == nil || target.Status != common.UserStatusEnabled || target.Role < common.RoleCustomerServiceUser {
+			common.ApiErrorMsg(c, "assignee must be an active customer service or admin user")
+			return
+		}
+	}
+
+	ticket, prevAssign, err := model.AssignTicket(ticketId, req.AssigneeId, req.ExpectedAssigneeId)
+	if err != nil {
+		handleTicketError(c, err)
+		return
+	}
+	// 分配人确实变化时才发通知（减少噪音）。
+	if prevAssign != req.AssigneeId && req.AssigneeId > 0 {
+		service.NotifyTicketAssigned(ticket, req.AssigneeId)
+	}
+	common.ApiSuccess(c, gin.H{"ticket": ticket})
+}
+
+// ListTicketStaff 返回可作为工单处理人的账号列表（客服 + 管理员 + 超级管理员）。
+// 给前端分配下拉选择使用。仅返回非禁用账号。
+func ListTicketStaff(c *gin.Context) {
+	users, err := model.GetTicketStaffUsers()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, users)
+}
+
 func GetTicket(c *gin.Context) {
 	ticketId, ok := parseTicketID(c)
 	if !ok {
@@ -392,6 +543,9 @@ func GetTicket(c *gin.Context) {
 	ticket, err := model.GetTicketById(ticketId)
 	if err != nil {
 		handleTicketError(c, err)
+		return
+	}
+	if !ensureTicketAccessible(c, ticket) {
 		return
 	}
 	resp, err := buildTicketDetailResponse(ticket)
@@ -421,6 +575,16 @@ func CreateAdminTicketMessage(c *gin.Context) {
 	currentUser, err := getTicketCurrentUser(c)
 	if err != nil {
 		common.ApiError(c, err)
+		return
+	}
+
+	// 客服视角：确认有权限处理这张工单（要么是负责人，要么在同组待认领池）。
+	existing, err := model.GetTicketById(ticketId)
+	if err != nil {
+		handleTicketError(c, err)
+		return
+	}
+	if !ensureTicketAccessible(c, existing) {
 		return
 	}
 
@@ -458,6 +622,15 @@ func UpdateTicketStatus(c *gin.Context) {
 	}
 	if req.Status == nil && req.Priority == nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	existing, err := model.GetTicketById(ticketId)
+	if err != nil {
+		handleTicketError(c, err)
+		return
+	}
+	if !ensureTicketAccessible(c, existing) {
 		return
 	}
 
@@ -520,6 +693,10 @@ func CreateInvoiceTicket(c *gin.Context) {
 		return
 	}
 
+	service.AutoAssignTicketOnCreate(ticket.Id, ticket.Type, service.NotifyTicketAssigned)
+	if refreshed, refreshErr := model.GetTicketById(ticket.Id); refreshErr == nil {
+		ticket = refreshed
+	}
 	service.NotifyTicketCreatedToAdmin(ticket, message)
 	common.ApiSuccess(c, gin.H{
 		"ticket":         ticket,
@@ -532,6 +709,14 @@ func CreateInvoiceTicket(c *gin.Context) {
 func GetTicketInvoice(c *gin.Context) {
 	ticketId, ok := parseTicketID(c)
 	if !ok {
+		return
+	}
+	existing, err := model.GetTicketById(ticketId)
+	if err != nil {
+		handleTicketError(c, err)
+		return
+	}
+	if !ensureTicketAccessible(c, existing) {
 		return
 	}
 	invoice, orders, err := model.GetTicketInvoiceDetail(ticketId)
@@ -576,6 +761,10 @@ func CreateRefundTicket(c *gin.Context) {
 		return
 	}
 
+	service.AutoAssignTicketOnCreate(ticket.Id, ticket.Type, service.NotifyTicketAssigned)
+	if refreshed, refreshErr := model.GetTicketById(ticket.Id); refreshErr == nil {
+		ticket = refreshed
+	}
 	service.NotifyTicketCreatedToAdmin(ticket, message)
 	common.ApiSuccess(c, gin.H{
 		"ticket":  ticket,
@@ -587,6 +776,14 @@ func CreateRefundTicket(c *gin.Context) {
 func GetTicketRefund(c *gin.Context) {
 	ticketId, ok := parseTicketID(c)
 	if !ok {
+		return
+	}
+	existing, err := model.GetTicketById(ticketId)
+	if err != nil {
+		handleTicketError(c, err)
+		return
+	}
+	if !ensureTicketAccessible(c, existing) {
 		return
 	}
 	refund, err := model.GetTicketRefundByTicketId(ticketId)
@@ -608,6 +805,15 @@ func UpdateRefundStatus(c *gin.Context) {
 	var req UpdateRefundStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	existing, err := model.GetTicketById(ticketId)
+	if err != nil {
+		handleTicketError(c, err)
+		return
+	}
+	if !ensureTicketAccessible(c, existing) {
 		return
 	}
 
@@ -667,8 +873,8 @@ const (
 	ticketUserModelUsageDays  = 30
 )
 
-// GetTicketUserProfile 管理员在工单详情页查看用户画像。
-// 任一分项加载失败不影响其它字段返回。
+// GetTicketUserProfile 管理员/客服在工单详情页查看用户画像。
+// 任一分项加载失败不影响其它字段返回。客服只能看到分配给自己或本组待认领工单的用户画像。
 func GetTicketUserProfile(c *gin.Context) {
 	ticketId, ok := parseTicketID(c)
 	if !ok {
@@ -677,6 +883,9 @@ func GetTicketUserProfile(c *gin.Context) {
 	ticket, err := model.GetTicketById(ticketId)
 	if err != nil {
 		handleTicketError(c, err)
+		return
+	}
+	if !ensureTicketAccessible(c, ticket) {
 		return
 	}
 
@@ -735,6 +944,15 @@ func UpdateInvoiceStatus(c *gin.Context) {
 	var req UpdateInvoiceStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	existing, err := model.GetTicketById(ticketId)
+	if err != nil {
+		handleTicketError(c, err)
+		return
+	}
+	if !ensureTicketAccessible(c, existing) {
 		return
 	}
 
