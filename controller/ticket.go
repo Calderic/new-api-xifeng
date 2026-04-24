@@ -418,7 +418,7 @@ func GetAllTickets(c *gin.Context) {
 	role := c.GetInt("role")
 	currentUserId := c.GetInt("id")
 	if role >= common.RoleAdminUser {
-		// 管理员视角：默认全部；scope 仅作过滤
+		// 管理员视角：默认看全部；scope=mine 只看自己处理的；scope=unassigned 只看待认领池
 		switch scope {
 		case "mine":
 			opts.AssigneeId = currentUserId
@@ -426,16 +426,25 @@ func GetAllTickets(c *gin.Context) {
 			opts.AssigneeId = -1
 		}
 	} else {
-		// 客服视角：限定在同组池内
+		// 客服视角（role=5）：
+		//   - 默认 / scope=mine：只看分配给自己的工单（和用户侧"我的工单"是对称语义）
+		//   - scope=unassigned：只看自己负责的那些"类型"里的待认领工单；
+		//     这里按 type 过滤而不是按 assignee 成员列表，因为未分配工单的 assignee_id=0
+		//     无法携带分组信息，更自然的归属是"工单类型 → 规则 → 客服"。
+		// 不再提供"看到所有工单"的视角，避免越权与视觉噪音。
 		switch scope {
-		case "mine":
-			opts.AssigneeId = currentUserId
 		case "unassigned":
 			opts.AssigneeId = -1
-			opts.AssigneeIn = service.ResolveAssigneeIdsForUser(currentUserId, role)
+			myTypes := setting.TicketTypesForUser(currentUserId)
+			if opts.Type == "" && len(myTypes) > 0 {
+				opts.TypeIn = myTypes
+			}
+			if len(myTypes) == 0 {
+				// 未加入任何分组的客服 —— 没有可认领的工单，强制返回空结果。
+				opts.TypeIn = []string{"__none__"}
+			}
 		default:
-			opts.AssigneeIn = service.ResolveAssigneeIdsForUser(currentUserId, role)
-			opts.IncludeUnassigned = true
+			opts.AssigneeId = currentUserId
 		}
 	}
 

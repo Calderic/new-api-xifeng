@@ -19,6 +19,8 @@ const TicketsTable = ({
   admin = false,
   onOpenDetail,
   onCloseTicket,
+  staffIndex, // Map<number, TicketStaffUser>，用于"分配客服"列渲染
+  showAssignee = false, // 仅管理员及以上视角展示"分配客服"列
   t,
 }) => {
   const columns = useMemo(
@@ -28,8 +30,10 @@ const TicketsTable = ({
         admin,
         onOpenDetail,
         onCloseTicket,
+        staffIndex,
+        showAssignee,
       }),
-    [t, admin, onOpenDetail, onCloseTicket],
+    [t, admin, onOpenDetail, onCloseTicket, staffIndex, showAssignee],
   );
 
   return (

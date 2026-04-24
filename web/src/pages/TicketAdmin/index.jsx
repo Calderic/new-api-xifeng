@@ -5,6 +5,8 @@ import {
   Descriptions,
   Empty,
   Input,
+  RadioGroup,
+  Radio,
   Select,
   Space,
   Tag,
@@ -13,7 +15,7 @@ import {
 import { IconSearch } from '@douyinfe/semi-icons';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { API, showError, showSuccess, timestamp2string } from '../../helpers';
+import { API, isAdmin, showError, showSuccess, timestamp2string } from '../../helpers';
 import { useTableCompactMode } from '../../hooks/common/useTableCompactMode';
 import TicketsPage from '../../components/table/tickets';
 import TicketConversation from '../../components/ticket/TicketConversation';
@@ -34,6 +36,19 @@ import {
 
 const { Title, Text } = Typography;
 
+// 读取当前登录账号的 id，用于判断"这张工单是不是分配给我的"以及按钮的显示逻辑。
+// 与 isAdmin() 一样直接走 localStorage，不依赖 UserContext 以减少耦合。
+const getCurrentAccount = () => {
+  try {
+    const raw = localStorage.getItem('user');
+    if (!raw) return { id: 0, role: 0 };
+    const u = JSON.parse(raw);
+    return { id: Number(u?.id) || 0, role: Number(u?.role) || 0 };
+  } catch {
+    return { id: 0, role: 0 };
+  }
+};
+
 const AdminTicketDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -48,6 +63,7 @@ const AdminTicketDetail = () => {
   const [refund, setRefund] = useState(null);
   const [statusValue, setStatusValue] = useState(1);
   const [priorityValue, setPriorityValue] = useState(2);
+  const account = useMemo(() => getCurrentAccount(), []);
 
   const loadInvoiceDetail = useCallback(async () => {
     const res = await API.get(`/api/ticket/admin/${id}/invoice`);
@@ -160,6 +176,29 @@ const AdminTicketDetail = () => {
     }
   };
 
+  // 显式"认领"——把工单分配给当前登录用户。
+  // 后端 /:id/assign 使用乐观锁：如果此时已被其他同事抢先认领，会返回 ErrTicketAssigneeInvalid，
+  // 这里直接把错误消息透给用户，让他们再刷新一次即可。
+  const handleClaim = async () => {
+    setSaving(true);
+    try {
+      const res = await API.put(`/api/ticket/admin/${id}/assign`, {
+        assignee_id: account.id,
+        expected_assignee_id: 0,
+      });
+      if (res.data?.success) {
+        showSuccess(t('已认领该工单'));
+        await loadDetail();
+      } else {
+        showError(res.data?.message || t('认领失败，可能已被他人认领'));
+      }
+    } catch (error) {
+      showError(t('请求失败'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSaveStatus = async () => {
     setSaving(true);
     try {
@@ -235,7 +274,7 @@ const AdminTicketDetail = () => {
         <div className='flex flex-col gap-4'>
           <div className='flex flex-col md:flex-row md:items-start md:justify-between gap-3'>
             <div className='flex flex-col gap-2'>
-              <Space>
+              <Space wrap>
                 <Button
                   theme='borderless'
                   onClick={() => {
@@ -248,6 +287,31 @@ const AdminTicketDetail = () => {
                   {t('返回工单管理')}
                 </Button>
                 <TicketStatusTag status={ticket?.status} t={t} />
+                {Number(ticket?.assignee_id || 0) === 0 ? (
+                  <Tag color='grey' shape='circle'>
+                    {t('待认领')}
+                  </Tag>
+                ) : Number(ticket?.assignee_id) === account.id ? (
+                  <Tag color='green' shape='circle'>
+                    {t('分配给我')}
+                  </Tag>
+                ) : (
+                  <Tag color='blue' shape='circle'>
+                    {t('处理中 · 客服 #') + ticket?.assignee_id}
+                  </Tag>
+                )}
+                {/* 未分配时显示 "认领" 入口；回复区首条消息也会隐式认领，这里是显式快捷通道。 */}
+                {Number(ticket?.assignee_id || 0) === 0 && account.id > 0 && (
+                  <Button
+                    size='small'
+                    theme='solid'
+                    type='primary'
+                    loading={saving}
+                    onClick={handleClaim}
+                  >
+                    {t('认领工单')}
+                  </Button>
+                )}
               </Space>
               <Title heading={4} className='!mb-0'>
                 {ticket?.subject || '-'}
@@ -314,7 +378,7 @@ const AdminTicketDetail = () => {
 
       <TicketConversation
         messages={messages}
-        currentUserId={ticket?.admin_id}
+        currentUserId={account.id}
         loading={loading}
         t={t}
       />
@@ -339,12 +403,19 @@ const TicketAdmin = () => {
   const [tickets, setTickets] = useState([]);
   const [ticketCount, setTicketCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  // 客服/管理员候选列表，用于把工单的 assignee_id 解析成可读姓名 + 角色徽章。
+  // 只拉一次：列表相对稳定，变动频率低于工单本身。
+  const [staffList, setStaffList] = useState([]);
   const activePage = Math.max(1, Number(searchParams.get('p')) || 1);
   const pageSize = Math.max(1, Number(searchParams.get('page_size')) || 10);
   const statusFilter = searchParams.get('status') || '';
   const typeFilter = searchParams.get('type') || '';
   const searchKeyword = searchParams.get('keyword') || '';
   const companyNameParam = searchParams.get('company_name') || '';
+  // scope 控制视角：'' = 全部（仅管理员）/ 'mine' = 分配给我的 / 'unassigned' = 待认领池。
+  // 客服默认落到 'mine'，避免打开页面就看到一堆不归自己管的工单。
+  const viewerIsAdmin = isAdmin();
+  const scopeParam = searchParams.get('scope') || (viewerIsAdmin ? '' : 'mine');
   const [keyword, setKeyword] = useState(searchKeyword);
   const [companyName, setCompanyName] = useState(companyNameParam);
 
@@ -392,6 +463,15 @@ const TicketAdmin = () => {
     (value) => updateSearchParams({ company_name: value, p: '' }),
     [updateSearchParams],
   );
+  const setScope = useCallback(
+    (value) =>
+      updateSearchParams({
+        // 'all' 对应内部空值（管理员默认），前端 URL 保持简洁。
+        scope: value === 'all' ? '' : value,
+        p: '',
+      }),
+    [updateSearchParams],
+  );
 
   useEffect(() => {
     setKeyword(searchKeyword);
@@ -411,6 +491,7 @@ const TicketAdmin = () => {
           type: typeFilter || undefined,
           keyword: searchKeyword || undefined,
           company_name: companyNameParam || undefined,
+          scope: scopeParam || undefined,
         },
       });
       if (res.data?.success) {
@@ -425,12 +506,38 @@ const TicketAdmin = () => {
     } finally {
       setLoading(false);
     }
-  }, [activePage, pageSize, searchKeyword, companyNameParam, statusFilter, typeFilter, t]);
+  }, [activePage, pageSize, searchKeyword, companyNameParam, statusFilter, typeFilter, scopeParam, t]);
 
   useEffect(() => {
     if (id) return;
     loadTickets();
   }, [id, loadTickets]);
+
+  // 列表页挂载时拉一次客服列表，用来解析"分配客服"列。
+  // 接口对客服角色也放行（TicketStaffAuth），所以两种身份都能拿到。
+  useEffect(() => {
+    if (id) return;
+    let ignore = false;
+    (async () => {
+      try {
+        const res = await API.get('/api/ticket/admin/staff');
+        if (!ignore && res.data?.success) {
+          setStaffList(res.data.data || []);
+        }
+      } catch (e) {
+        // 列表拉失败时，"分配客服"列会退化为只显示 #id，不影响主流程。
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [id]);
+
+  const staffIndex = useMemo(() => {
+    const m = new Map();
+    staffList.forEach((u) => m.set(Number(u.id), u));
+    return m;
+  }, [staffList]);
 
   const statusOptions = useMemo(
     () => [
@@ -471,6 +578,10 @@ const TicketAdmin = () => {
       handlePageChange={setActivePage}
       handlePageSizeChange={setPageSize}
       admin
+      // 只有真正的管理员/超级管理员需要知道"这张工单归谁"；
+      // 客服视角下工单都是分配给自己的，这一列对他们是噪音。
+      showAssignee={viewerIsAdmin}
+      staffIndex={staffIndex}
       onOpenDetail={(ticket) => {
         const query = searchParams.toString();
         navigate(
@@ -479,49 +590,62 @@ const TicketAdmin = () => {
       }}
       t={t}
       actionsArea={
-        <div className='flex flex-col md:flex-row md:items-center md:justify-between gap-3 w-full'>
-          <Space wrap>
-            <Input
-              value={keyword}
-              placeholder={t('搜索工单主题、用户名或 ID')}
-              style={{ width: 280 }}
-              prefix={<IconSearch />}
-              showClear
-              onChange={setKeyword}
-              onEnterPress={() => setSearchKeyword(keyword)}
-            />
-            {(typeFilter === '' || typeFilter === 'invoice') && (
+        <div className='flex flex-col gap-3 w-full'>
+          {/* 视角切换：管理员 3 个档位，客服 2 个档位（没有"全部"入口）。
+              URL 上用 scope 参数持久化，方便刷新 / 分享链接。 */}
+          <RadioGroup
+            type='button'
+            value={scopeParam || (viewerIsAdmin ? 'all' : 'mine')}
+            onChange={(e) => setScope(e.target.value)}
+          >
+            {viewerIsAdmin && <Radio value='all'>{t('全部工单')}</Radio>}
+            <Radio value='mine'>{t('我的工单')}</Radio>
+            <Radio value='unassigned'>{t('待认领池')}</Radio>
+          </RadioGroup>
+          <div className='flex flex-col md:flex-row md:items-center md:justify-between gap-3'>
+            <Space wrap>
               <Input
-                value={companyName}
-                placeholder={t('发票抬头（公司名称）')}
-                style={{ width: 220 }}
+                value={keyword}
+                placeholder={t('搜索工单主题、用户名或 ID')}
+                style={{ width: 280 }}
                 prefix={<IconSearch />}
                 showClear
-                onChange={setCompanyName}
-                onEnterPress={() => setCompanyNameFilter(companyName)}
+                onChange={setKeyword}
+                onEnterPress={() => setSearchKeyword(keyword)}
               />
-            )}
-          </Space>
-          <Space wrap>
-            <Select
-              value={statusFilter}
-              optionList={statusOptions}
-              style={{ width: 160 }}
-              onChange={setStatusFilter}
-            />
-            <Select
-              value={typeFilter}
-              optionList={typeOptions}
-              style={{ width: 160 }}
-              onChange={(value) => {
-                // 切到非发票类型时清理抬头搜索，避免残留参数不生效造成用户困惑。
-                if (value && value !== 'invoice' && companyNameParam) {
-                  setCompanyNameFilter('');
-                }
-                setTypeFilter(value);
-              }}
-            />
-          </Space>
+              {(typeFilter === '' || typeFilter === 'invoice') && (
+                <Input
+                  value={companyName}
+                  placeholder={t('发票抬头（公司名称）')}
+                  style={{ width: 220 }}
+                  prefix={<IconSearch />}
+                  showClear
+                  onChange={setCompanyName}
+                  onEnterPress={() => setCompanyNameFilter(companyName)}
+                />
+              )}
+            </Space>
+            <Space wrap>
+              <Select
+                value={statusFilter}
+                optionList={statusOptions}
+                style={{ width: 160 }}
+                onChange={setStatusFilter}
+              />
+              <Select
+                value={typeFilter}
+                optionList={typeOptions}
+                style={{ width: 160 }}
+                onChange={(value) => {
+                  // 切到非发票类型时清理抬头搜索，避免残留参数不生效造成用户困惑。
+                  if (value && value !== 'invoice' && companyNameParam) {
+                    setCompanyNameFilter('');
+                  }
+                  setTypeFilter(value);
+                }}
+              />
+            </Space>
+          </div>
         </div>
       }
     />

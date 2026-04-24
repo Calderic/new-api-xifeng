@@ -74,6 +74,9 @@ type TicketQueryOptions struct {
 	// AssigneeIn 返回 AssigneeId 在给定列表中的工单；常与 IncludeUnassigned 搭配使用，
 	// 用于展示"本组池"。空列表表示不启用。
 	AssigneeIn []int
+	// TypeIn 限定工单类型必须在给定列表中；与 Type 的单值过滤互斥，仅在 Type 为空时生效。
+	// 用于"客服只看自己负责类型的待认领池"。空列表表示不启用。
+	TypeIn []string
 }
 
 type CreateTicketParams struct {
@@ -210,6 +213,8 @@ func applyTicketFilters(query *gorm.DB, options TicketQueryOptions) *gorm.DB {
 	}
 	if ticketType != "" {
 		query = query.Where("tickets.type = ?", ticketType)
+	} else if len(options.TypeIn) > 0 {
+		query = query.Where("tickets.type IN ?", options.TypeIn)
 	}
 	// 分配过滤：支持"仅某人"、"某人 + 未分配"、"一组人 + 未分配"三种模式。
 	switch {

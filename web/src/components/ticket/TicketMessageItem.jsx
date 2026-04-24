@@ -20,8 +20,18 @@ const isImageMime = (mime) => typeof mime === 'string' && mime.toLowerCase().sta
 const attachmentUrl = (id, inline = false) =>
   `/api/ticket/attachment/${id}${inline ? '?inline=1' : ''}`;
 
+// resolveRoleBadge 把后端写入 TicketMessage.role 的数值翻译成前端展示用的徽章。
+// 与 common.RoleLabel 对齐：普通用户 / 客服 / 管理员 / 超级管理员。
+const resolveRoleBadge = (role, t) => {
+  const r = Number(role || 0);
+  if (r >= 100) return { text: t('超级管理员'), color: 'red' };
+  if (r >= 10) return { text: t('管理员'), color: 'orange' };
+  if (r >= 5) return { text: t('客服'), color: 'cyan' };
+  return { text: t('用户'), color: 'blue' };
+};
+
 const TicketMessageItem = ({ message, isMine, t }) => {
-  const isAdmin = Number(message?.role || 0) >= 10;
+  const badge = resolveRoleBadge(message?.role, t);
   const attachments = Array.isArray(message?.attachments) ? message.attachments : [];
   const images = attachments.filter((a) => isImageMime(a?.mime_type));
   const files = attachments.filter((a) => !isImageMime(a?.mime_type));
@@ -44,8 +54,8 @@ const TicketMessageItem = ({ message, isMine, t }) => {
         <div className='flex items-start justify-between gap-3 mb-2'>
           <Space spacing={6} wrap>
             <Text strong>{message?.username || t('未知用户')}</Text>
-            <Tag color={isAdmin ? 'orange' : 'blue'} shape='circle' size='small'>
-              {isAdmin ? t('管理员') : t('用户')}
+            <Tag color={badge.color} shape='circle' size='small'>
+              {badge.text}
             </Tag>
           </Space>
           <Text type='tertiary' size='small'>

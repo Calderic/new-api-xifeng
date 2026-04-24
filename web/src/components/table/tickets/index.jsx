@@ -24,6 +24,8 @@ const TicketsPage = ({
   admin = false,
   onOpenDetail,
   onCloseTicket,
+  staffIndex,
+  showAssignee = false,
   t,
 }) => {
   const isMobile = useIsMobile();
@@ -70,6 +72,8 @@ const TicketsPage = ({
         admin={admin}
         onOpenDetail={onOpenDetail}
         onCloseTicket={onCloseTicket}
+        staffIndex={staffIndex}
+        showAssignee={showAssignee}
         t={t}
       />
     </CardPro>

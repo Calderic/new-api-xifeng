@@ -38,10 +38,11 @@ type TicketAssignConfig struct {
 	Rules    map[string]TicketAssignRule `json:"rules"`
 }
 
-// 默认配置：关闭自动分配，但保留一个示例规则骨架方便管理员填充。
+// 默认配置：开启自动分配（但规则里没有候选时依然会回落到"待认领"池），
+// 保留三个基础规则骨架方便管理员填充。管理员只要把客服加入到对应规则里即可生效。
 func defaultTicketAssignConfig() TicketAssignConfig {
 	return TicketAssignConfig{
-		Enabled:  false,
+		Enabled:  true,
 		Fallback: TicketAssignFallbackNone,
 		Rules: map[string]TicketAssignRule{
 			"general": {Strategy: TicketAssignStrategyRoundRobin, Users: []int{}},
@@ -119,6 +120,25 @@ func AllAssigneeIds() []int {
 	}
 	sort.Ints(out)
 	return out
+}
+
+// TicketTypesForUser 返回某位客服在分配规则中出现过的工单类型列表。
+// 用于"待认领池"筛选：该客服只应该看到自己负责类型的未分配工单。
+// 若客服不在任何规则中，返回空切片；调用方应把这视为"没有可认领的工单"。
+func TicketTypesForUser(userId int) []string {
+	ticketAssignConfigMu.RLock()
+	defer ticketAssignConfigMu.RUnlock()
+	types := make([]string, 0, len(ticketAssignConfig.Rules))
+	for typeKey, rule := range ticketAssignConfig.Rules {
+		for _, uid := range rule.Users {
+			if uid == userId {
+				types = append(types, typeKey)
+				break
+			}
+		}
+	}
+	sort.Strings(types)
+	return types
 }
 
 // AssigneeIdsForUser 返回一位客服所属的"同组同事"的 ID 集合（包含自身）。
