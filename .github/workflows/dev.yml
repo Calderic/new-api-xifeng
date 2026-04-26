@@ -121,8 +121,13 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Print pull instructions
+        env:
+          # metadata-action emits tags newline-separated; pass through env so
+          # the shell never tries to parse the value as inline syntax.
+          META_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           echo "Pull this dev image with:"
-          for tag in ${{ steps.meta.outputs.tags }}; do
+          printf '%s\n' "${META_TAGS}" | while IFS= read -r tag; do
+            [ -z "${tag}" ] && continue
             echo "  docker pull ${tag}"
           done
