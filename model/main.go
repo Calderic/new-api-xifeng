@@ -301,6 +301,9 @@ func migrateDB() error {
 		&ModerationIncident{},
 		&ModerationRule{},
 		&EnforcementIncident{},
+		&ChannelMonitoringStat{},
+		&GroupMonitoringStat{},
+		&MonitoringHistory{},
 	)
 	if err != nil {
 		return err
