@@ -71,8 +71,10 @@ export default function SettingsGroupMonitoring(props) {
       try {
         const res = await API.get('/api/group/');
         if (res.data.success) {
-          const data = res.data.data || {};
-          const groupNames = Object.keys(data).filter((g) => g !== 'auto');
+          const data = res.data.data;
+          const groupNames = (
+            Array.isArray(data) ? data : Object.keys(data || {})
+          ).filter((g) => g !== 'auto');
           setAvailableGroups(groupNames);
         }
       } catch {
