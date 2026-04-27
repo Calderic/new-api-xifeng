@@ -27,14 +27,15 @@ export default function SettingsGroupMonitoring(props) {
   const [availableGroups, setAvailableGroups] = useState([]);
 
   const [inputs, setInputs] = useState({
-    'group_monitoring.groups': '',
-    'group_monitoring.availability_period_minutes': 60,
-    'group_monitoring.cache_hit_period_minutes': 60,
-    'group_monitoring.aggregation_interval_minutes': 5,
-    'group_monitoring.availability_exclude_models': '',
-    'group_monitoring.cache_hit_exclude_models': '',
-    'group_monitoring.availability_exclude_keywords': '',
-    'group_monitoring.cache_tokens_separate_groups': '',
+    'group_monitoring_setting.monitoring_groups': '',
+    'group_monitoring_setting.group_display_order': '',
+    'group_monitoring_setting.availability_period_minutes': 60,
+    'group_monitoring_setting.cache_hit_period_minutes': 60,
+    'group_monitoring_setting.aggregation_interval_minutes': 5,
+    'group_monitoring_setting.availability_exclude_models': '',
+    'group_monitoring_setting.cache_hit_exclude_models': '',
+    'group_monitoring_setting.availability_exclude_keywords': '',
+    'group_monitoring_setting.cache_tokens_separate_groups': '',
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
@@ -152,7 +153,7 @@ export default function SettingsGroupMonitoring(props) {
   }
 
   const selectedGroups = parseArrayField(
-    inputs['group_monitoring.groups']
+    inputs['group_monitoring_setting.monitoring_groups']
   );
 
   return (
@@ -177,9 +178,11 @@ export default function SettingsGroupMonitoring(props) {
                   placeholder={t('选择需要监控的分组')}
                   value={selectedGroups}
                   onChange={(val) => {
+                    const encoded = arrayToString(val);
                     setInputs({
                       ...inputs,
-                      'group_monitoring.groups': arrayToString(val),
+                      'group_monitoring_setting.monitoring_groups': encoded,
+                      'group_monitoring_setting.group_display_order': encoded,
                     });
                   }}
                 >
@@ -202,9 +205,11 @@ export default function SettingsGroupMonitoring(props) {
                 <TagInput
                   value={selectedGroups}
                   onChange={(val) => {
+                    const encoded = arrayToString(val);
                     setInputs({
                       ...inputs,
-                      'group_monitoring.groups': arrayToString(val),
+                      'group_monitoring_setting.monitoring_groups': encoded,
+                      'group_monitoring_setting.group_display_order': encoded,
                     });
                   }}
                   draggable
@@ -224,11 +229,11 @@ export default function SettingsGroupMonitoring(props) {
                 min={1}
                 suffix={t('分钟')}
                 extraText={t('统计可用率的时间窗口')}
-                field={'group_monitoring.availability_period_minutes'}
+                field={'group_monitoring_setting.availability_period_minutes'}
                 onChange={(value) =>
                   setInputs({
                     ...inputs,
-                    'group_monitoring.availability_period_minutes':
+                    'group_monitoring_setting.availability_period_minutes':
                       parseInt(value) || 60,
                   })
                 }
@@ -241,11 +246,11 @@ export default function SettingsGroupMonitoring(props) {
                 min={1}
                 suffix={t('分钟')}
                 extraText={t('统计缓存命中率的时间窗口')}
-                field={'group_monitoring.cache_hit_period_minutes'}
+                field={'group_monitoring_setting.cache_hit_period_minutes'}
                 onChange={(value) =>
                   setInputs({
                     ...inputs,
-                    'group_monitoring.cache_hit_period_minutes':
+                    'group_monitoring_setting.cache_hit_period_minutes':
                       parseInt(value) || 60,
                   })
                 }
@@ -258,11 +263,11 @@ export default function SettingsGroupMonitoring(props) {
                 min={1}
                 suffix={t('分钟')}
                 extraText={t('历史数据聚合的时间间隔')}
-                field={'group_monitoring.aggregation_interval_minutes'}
+                field={'group_monitoring_setting.aggregation_interval_minutes'}
                 onChange={(value) =>
                   setInputs({
                     ...inputs,
-                    'group_monitoring.aggregation_interval_minutes':
+                    'group_monitoring_setting.aggregation_interval_minutes':
                       parseInt(value) || 5,
                   })
                 }
@@ -279,12 +284,12 @@ export default function SettingsGroupMonitoring(props) {
                 </Text>
                 <TagInput
                   value={parseArrayField(
-                    inputs['group_monitoring.availability_exclude_models']
+                    inputs['group_monitoring_setting.availability_exclude_models']
                   )}
                   onChange={(val) =>
                     setInputs({
                       ...inputs,
-                      'group_monitoring.availability_exclude_models':
+                      'group_monitoring_setting.availability_exclude_models':
                         arrayToString(val),
                     })
                   }
@@ -307,12 +312,12 @@ export default function SettingsGroupMonitoring(props) {
                 </Text>
                 <TagInput
                   value={parseArrayField(
-                    inputs['group_monitoring.cache_hit_exclude_models']
+                    inputs['group_monitoring_setting.cache_hit_exclude_models']
                   )}
                   onChange={(val) =>
                     setInputs({
                       ...inputs,
-                      'group_monitoring.cache_hit_exclude_models':
+                      'group_monitoring_setting.cache_hit_exclude_models':
                         arrayToString(val),
                     })
                   }
@@ -338,12 +343,12 @@ export default function SettingsGroupMonitoring(props) {
                 </Text>
                 <TagInput
                   value={parseArrayField(
-                    inputs['group_monitoring.availability_exclude_keywords']
+                    inputs['group_monitoring_setting.availability_exclude_keywords']
                   )}
                   onChange={(val) =>
                     setInputs({
                       ...inputs,
-                      'group_monitoring.availability_exclude_keywords':
+                      'group_monitoring_setting.availability_exclude_keywords':
                         arrayToString(val),
                     })
                   }
@@ -366,12 +371,12 @@ export default function SettingsGroupMonitoring(props) {
                 </Text>
                 <TagInput
                   value={parseArrayField(
-                    inputs['group_monitoring.cache_tokens_separate_groups']
+                    inputs['group_monitoring_setting.cache_tokens_separate_groups']
                   )}
                   onChange={(val) =>
                     setInputs({
                       ...inputs,
-                      'group_monitoring.cache_tokens_separate_groups':
+                      'group_monitoring_setting.cache_tokens_separate_groups':
                         arrayToString(val),
                     })
                   }

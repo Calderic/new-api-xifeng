@@ -84,14 +84,15 @@ const OperationSetting = () => {
     'token_setting.max_user_tokens': 1000,
 
     /* 分组监控设置 */
-    'group_monitoring.groups': '',
-    'group_monitoring.availability_period_minutes': 60,
-    'group_monitoring.cache_hit_period_minutes': 60,
-    'group_monitoring.aggregation_interval_minutes': 5,
-    'group_monitoring.availability_exclude_models': '',
-    'group_monitoring.cache_hit_exclude_models': '',
-    'group_monitoring.availability_exclude_keywords': '',
-    'group_monitoring.cache_tokens_separate_groups': '',
+    'group_monitoring_setting.monitoring_groups': '',
+    'group_monitoring_setting.group_display_order': '',
+    'group_monitoring_setting.availability_period_minutes': 60,
+    'group_monitoring_setting.cache_hit_period_minutes': 60,
+    'group_monitoring_setting.aggregation_interval_minutes': 5,
+    'group_monitoring_setting.availability_exclude_models': '',
+    'group_monitoring_setting.cache_hit_exclude_models': '',
+    'group_monitoring_setting.availability_exclude_keywords': '',
+    'group_monitoring_setting.cache_tokens_separate_groups': '',
   });
 
   let [loading, setLoading] = useState(false);
