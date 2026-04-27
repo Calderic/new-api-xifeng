@@ -165,7 +165,7 @@ func CountRiskRules() (int64, error) {
 func CountEnabledRiskRulesWithoutGroups() (int64, error) {
 	var count int64
 	err := DB.Model(&RiskRule{}).
-		Where("enabled = ? AND (groups IS NULL OR groups = '' OR groups = '[]')", true).
+		Where("enabled = ? AND ("+commonGroupsCol+" IS NULL OR "+commonGroupsCol+" = '' OR "+commonGroupsCol+" = '[]')", true).
 		Count(&count).Error
 	return count, err
 }

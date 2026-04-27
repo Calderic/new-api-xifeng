@@ -18,6 +18,7 @@ import (
 )
 
 var commonGroupCol string
+var commonGroupsCol string
 var commonKeyCol string
 var commonTrueVal string
 var commonFalseVal string
@@ -29,11 +30,13 @@ func initCol() {
 	// init common column names
 	if common.UsingPostgreSQL {
 		commonGroupCol = `"group"`
+		commonGroupsCol = `"groups"`
 		commonKeyCol = `"key"`
 		commonTrueVal = "true"
 		commonFalseVal = "false"
 	} else {
 		commonGroupCol = "`group`"
+		commonGroupsCol = "`groups`"
 		commonKeyCol = "`key`"
 		commonTrueVal = "1"
 		commonFalseVal = "0"
