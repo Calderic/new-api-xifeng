@@ -27,8 +27,10 @@ function alignAndFillHistory(history, intervalMinutes) {
     const aligned = Math.round(t / stepMs) * stepMs;
     const entry = byTime[aligned];
     if (entry) {
-      lastAvail = entry.availability_rate ?? lastAvail;
-      lastCache = entry.cache_hit_rate ?? lastCache;
+      if (entry.availability_rate != null && entry.availability_rate >= 0)
+        lastAvail = entry.availability_rate;
+      if (entry.cache_hit_rate != null && entry.cache_hit_rate >= 0)
+        lastCache = entry.cache_hit_rate;
     }
     const timeStr = new Date(aligned).toLocaleTimeString([], {
       hour: '2-digit',

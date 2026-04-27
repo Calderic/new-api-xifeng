@@ -59,7 +59,22 @@ const GroupMonitoringDashboard = () => {
             groupData = await Promise.all(historyPromises);
           }
 
-          setGroups(groupData);
+          setGroups((prev) => {
+            if (!includeHistory && prev.length > 0) {
+              return groupData.map((g) => {
+                const old = prev.find((p) => p.group_name === g.group_name);
+                if (old) {
+                  return {
+                    ...g,
+                    history: old.history,
+                    aggregation_interval_minutes: old.aggregation_interval_minutes,
+                  };
+                }
+                return g;
+              });
+            }
+            return groupData;
+          });
           setLastUpdated(new Date());
         } else {
           showError(res.data.message || t('获取监控数据失败'));
