@@ -526,13 +526,12 @@ func (m *moderationCenter) recordResult(event *moderationEvent, result *Moderati
 		// the error via the polled Done channel.
 		return
 	}
-	// v3: no fallback threshold — only persist when a rule fired. Debug
-	// events always persist so admins can audit threshold-tuning sessions.
-	if result.Decision == nil || result.Decision.Decision == ModerationDecisionAllow {
-		if event.Source != "debug" {
-			return
-		}
-	}
+	// Every successfully scored request gets an incident row regardless of
+	// whether a rule fired — operators need a complete audit trail to
+	// answer "did moderation actually run on this request" without ambiguity.
+	// flagged distinguishes rule hits from benign rows; the two-tier
+	// retention policy (BenignRetentionHours / FlaggedRetentionHours) keeps
+	// the table from growing unbounded by aging benign rows out faster.
 	matchedJSON := ""
 	primaryRule := ""
 	decision := ModerationDecisionAllow
