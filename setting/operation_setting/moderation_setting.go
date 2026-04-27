@@ -34,6 +34,11 @@ type ModerationSetting struct {
 	WorkerCount          int               `json:"worker_count"`
 	HTTPTimeoutMS        int               `json:"http_timeout_ms"`
 	MaxRetries           int               `json:"max_retries"`
+	// RedisQueueEnabled writes events to a Redis-backed write-ahead log
+	// so multi-instance deployments don't lose in-flight events on
+	// rolling restart. Falls back to memory-only when Redis is
+	// unreachable. Strongly recommended for multi-instance setups.
+	RedisQueueEnabled    bool              `json:"redis_queue_enabled"`
 	SamplingRatePercent  int               `json:"sampling_rate_percent"`
 	ImageMaxSizeKB       int               `json:"image_max_size_kb"`
 	EnabledGroups        []string          `json:"enabled_groups"`
@@ -56,16 +61,17 @@ var moderationSetting = ModerationSetting{
 	BaseURL:               ModerationDefaultBaseURL,
 	Model:                 ModerationDefaultModel,
 	APIKeys:               []string{},
-	// 1500 RPM target sizing — see DEV_GUIDE §14 for the math. OpenAI
-	// moderation RTT measured ~140ms in production; 16 workers x 7 req/s
-	// ~= 113 req/s capacity gives 6.5x headroom over the 17.5 req/s
-	// expected steady-state load (after the failed-request filter).
-	// 1000 RPM target sizing: at 100% sampling and 17 RPS steady state,
-	// 8 workers × OpenAI ~140ms RTT ≈ 57 req/s capacity gives 3x headroom.
-	EventQueueSize:        4096,
-	WorkerCount:           8,
+	// 3000 RPM peak / multi-instance sizing: 50 RPS × 100% sampling.
+	// 16 workers × OpenAI ~140ms RTT ≈ 114 req/s capacity per instance
+	// (≈2.3x single-instance headroom; with 3 instances ≈ 7x). Queue
+	// 16384 absorbs ~5min of OpenAI outage at 50 RPS before drops.
+	// RedisQueueEnabled defaults on so multi-instance rolling restarts
+	// don't lose in-flight events.
+	EventQueueSize:        16384,
+	WorkerCount:           16,
 	HTTPTimeoutMS:         3000,
 	MaxRetries:            3,
+	RedisQueueEnabled:     true,
 	SamplingRatePercent:   100,
 	ImageMaxSizeKB:        2048,
 	EnabledGroups:         []string{},

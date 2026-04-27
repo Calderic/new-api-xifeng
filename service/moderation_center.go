@@ -66,6 +66,11 @@ type moderationCenter struct {
 	httpClient  *http.Client
 	debugStore  sync.Map // requestID -> *moderationDebugEntry
 	workerState sync.Map // workerID -> *moderationWorkerState
+	// redisQueue is a write-ahead log used so events survive process
+	// restart in multi-instance deployments. Pure best-effort — Redis
+	// outages never block the relay path; the in-memory channel remains
+	// the source of truth for worker dispatch on each instance.
+	redisQueue *moderationRedisQueue
 }
 
 type moderationWorkerState struct {
@@ -80,6 +85,25 @@ type moderationDebugEntry struct {
 }
 
 var globalModerationCenter = &moderationCenter{}
+
+// decodeModerationEvent rebuilds a moderationEvent from a JSON payload
+// stored in the Redis WAL. The Done channel cannot survive serialisation,
+// so recovered events get a fresh nil channel — the only callers that
+// rely on Done are debug submissions, which never go through the WAL
+// (their Source is "debug" and the relay-side enqueue path skips Redis
+// for them; recovered events are always production traffic).
+func decodeModerationEvent(payload string) *moderationEvent {
+	if payload == "" {
+		return nil
+	}
+	var event moderationEvent
+	if err := common.UnmarshalJsonStr(payload, &event); err != nil {
+		common.SysError("moderation decode WAL event failed: " + err.Error())
+		return nil
+	}
+	event.Done = nil
+	return &event
+}
 
 // StartModerationCenter is wired from main.go and reloads when config changes.
 func StartModerationCenter() {
@@ -111,6 +135,15 @@ func (m *moderationCenter) start() {
 		},
 	}
 	m.keyRing = NewModerationKeyRing(cfg.APIKeys)
+	if cfg.RedisQueueEnabled {
+		m.redisQueue = newModerationRedisQueue(cfg.EventQueueSize)
+		if m.redisQueue != nil {
+			recovered := m.redisQueue.recoverIntoChannel(m.queue, decodeModerationEvent)
+			if recovered > 0 {
+				common.SysLog(fmt.Sprintf("moderation recovered %d events from Redis WAL", recovered))
+			}
+		}
+	}
 	if err := ReloadModerationRules(); err != nil {
 		common.SysError("moderation reload rules failed: " + err.Error())
 	}
@@ -401,9 +434,20 @@ func PreflightModerationHook(ctx context.Context, info *relaycommon.RelayInfo, m
 // enqueue uses ring-buffer semantics — when the queue is full we discard
 // the OLDEST queued event so the most recent moderation observation always
 // has a chance to be processed.
+//
+// When the Redis write-ahead log is enabled the event is also pushed to
+// rc:mod:queue so it survives a restart. Redis push errors do not affect
+// the in-memory enqueue path — persistence is best-effort.
 func (m *moderationCenter) enqueue(event *moderationEvent) {
 	if event == nil || m.queue == nil {
 		return
+	}
+	if m.redisQueue != nil {
+		if payload, err := common.Marshal(event); err == nil {
+			if err := m.redisQueue.enqueue(string(payload)); err != nil {
+				common.SysError("moderation redis enqueue failed: " + err.Error())
+			}
+		}
 	}
 	select {
 	case m.queue <- event:
@@ -452,6 +496,14 @@ func (m *moderationCenter) runWorker(workerID int) {
 		m.markWorker(workerID, "processing", common.GetTimestamp())
 		result := m.processEvent(event)
 		m.recordResult(event, result)
+		// Acknowledge the Redis write-ahead log entry. Best-effort — a
+		// stale entry just gets retried on next startup, which is the
+		// correct failure mode.
+		if m.redisQueue != nil {
+			if payload, err := common.Marshal(event); err == nil {
+				_ = m.redisQueue.complete(string(payload))
+			}
+		}
 		m.markWorker(workerID, "idle", common.GetTimestamp())
 	}
 }
@@ -483,6 +535,12 @@ func QueueStats() map[string]any {
 	if m.queue != nil {
 		memDepth = len(m.queue)
 	}
+	redisDepth := int64(0)
+	redisAvailable := false
+	if m.redisQueue != nil {
+		redisDepth = m.redisQueue.depth()
+		redisAvailable = true
+	}
 	workerCount := 0
 	workers := make([]map[string]any, 0)
 	m.workerState.Range(func(key, value any) bool {
@@ -501,6 +559,8 @@ func QueueStats() map[string]any {
 	})
 	out := map[string]any{
 		"queue_depth_memory": memDepth,
+		"queue_depth_redis":  redisDepth,
+		"redis_available":    redisAvailable,
 		"worker_count":       workerCount,
 		"worker_state":       workers,
 		"drop_count_total":   m.dropCount.Load(),
