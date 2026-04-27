@@ -44,12 +44,11 @@ const GroupMonitoringDashboard = () => {
                   `/api/monitoring/${prefix}/groups/${encodeURIComponent(g.group_name)}/history`
                 );
                 if (hRes.data.success) {
-                  const hData = hRes.data.data;
                   return {
                     ...g,
-                    history: hData.history || hData || [],
+                    history: hRes.data.data || [],
                     aggregation_interval_minutes:
-                      hData.aggregation_interval_minutes || 5,
+                      hRes.data.aggregation_interval_minutes || 5,
                   };
                 }
               } catch {
@@ -126,12 +125,14 @@ const GroupMonitoringDashboard = () => {
   };
 
   const handleCardClick = (group) => {
+    if (!admin) return;
     setSelectedGroup(group);
     setDetailVisible(true);
   };
 
-  const onlineCount = groups.filter((g) => g.is_online).length;
-  const offlineCount = groups.filter((g) => !g.is_online).length;
+  const isGroupOnline = (g) => g.is_online ?? (g.online_channels > 0);
+  const onlineCount = groups.filter(isGroupOnline).length;
+  const offlineCount = groups.filter((g) => !isGroupOnline(g)).length;
 
   return (
     <div style={{ padding: '16px 20px' }}>
@@ -235,7 +236,7 @@ const GroupMonitoringDashboard = () => {
             <GroupStatusCard
               key={g.group_name}
               group={g}
-              onClick={handleCardClick}
+              onClick={admin ? handleCardClick : undefined}
             />
           ))}
         </div>

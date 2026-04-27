@@ -9,7 +9,6 @@ import {
 import { useTranslation } from 'react-i18next';
 import { API, showError, isAdmin } from '../../helpers';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
-import AvailabilityCacheChart from './AvailabilityCacheChart';
 
 const { Text } = Typography;
 
@@ -43,55 +42,32 @@ const GroupDetailPanel = ({ visible, group, onClose }) => {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   const [detail, setDetail] = useState(null);
-  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [intervalMinutes, setIntervalMinutes] = useState(5);
 
   useEffect(() => {
     if (!visible || !group) return;
     setLoading(true);
 
-    const admin = isAdmin();
     const groupName = group.group_name;
 
     const fetchDetail = async () => {
       try {
-        if (admin) {
-          const res = await API.get(
-            `/api/monitoring/admin/groups/${encodeURIComponent(groupName)}`
-          );
-          if (res.data.success) {
-            setDetail(res.data.data);
-          } else {
-            showError(res.data.message || t('获取分组详情失败'));
-          }
+        const res = await API.get(
+          `/api/monitoring/admin/groups/${encodeURIComponent(groupName)}`
+        );
+        if (res.data.success) {
+          setDetail(res.data.data);
+        } else {
+          showError(res.data.message || t('获取分组详情失败'));
         }
       } catch {
         showError(t('获取分组详情失败'));
+      } finally {
+        setLoading(false);
       }
     };
 
-    const fetchHistory = async () => {
-      try {
-        const prefix = admin ? 'admin' : 'public';
-        const res = await API.get(
-          `/api/monitoring/${prefix}/groups/${encodeURIComponent(groupName)}/history`
-        );
-        if (res.data.success) {
-          const data = res.data.data;
-          setHistory(data.history || data || []);
-          if (data.aggregation_interval_minutes) {
-            setIntervalMinutes(data.aggregation_interval_minutes);
-          }
-        }
-      } catch {
-        showError(t('获取历史数据失败'));
-      }
-    };
-
-    Promise.all([fetchDetail(), fetchHistory()]).finally(() =>
-      setLoading(false)
-    );
+    fetchDetail();
   }, [visible, group, t]);
 
   const channelColumns = useMemo(
@@ -196,21 +172,6 @@ const GroupDetailPanel = ({ visible, group, onClose }) => {
       }
       bodyStyle={{ padding: '16px 20px' }}
     >
-      {/* History chart */}
-      <div style={{ marginBottom: 24 }}>
-        <Text strong style={{ fontSize: 14, marginBottom: 8, display: 'block' }}>
-          {t('历史趋势')}
-        </Text>
-        {loading ? (
-          <Skeleton.Paragraph rows={6} style={{ height: 260 }} />
-        ) : (
-          <AvailabilityCacheChart
-            history={history}
-            intervalMinutes={intervalMinutes}
-          />
-        )}
-      </div>
-
       {/* Channel details table (admin only) */}
       {isAdmin() && (
         <div>
