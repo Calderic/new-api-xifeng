@@ -21,16 +21,22 @@ function formatFRT(ms) {
 const GroupStatusCard = ({ group, onClick }) => {
   const { t } = useTranslation();
 
-  const isOnline = group.is_online;
-  const availRate = group.availability_rate ?? 0;
-  const cacheRate = group.cache_hit_rate ?? 0;
-  const showCache = cacheRate >= 3;
+  const isOnline = group.is_online ?? (group.online_channels > 0);
+  const availRate =
+    group.availability_rate != null && group.availability_rate >= 0
+      ? group.availability_rate
+      : null;
+  const cacheRate =
+    group.cache_hit_rate != null && group.cache_hit_rate >= 0
+      ? group.cache_hit_rate
+      : null;
+  const showCache = cacheRate != null && cacheRate >= 3;
 
   return (
     <Card
       bodyStyle={{ padding: 16 }}
       style={{
-        cursor: 'pointer',
+        cursor: onClick ? 'pointer' : 'default',
         transition: 'box-shadow 0.2s, transform 0.15s',
         borderRadius: 12,
       }}
@@ -129,15 +135,19 @@ const GroupStatusCard = ({ group, onClick }) => {
           <Text
             size='small'
             strong
-            style={{ color: getRateColor(availRate) }}
+            style={{
+              color: availRate != null
+                ? getRateColor(availRate)
+                : 'var(--semi-color-text-2)',
+            }}
           >
-            {availRate.toFixed(1)}%
+            {availRate != null ? `${availRate.toFixed(1)}%` : 'N/A'}
           </Text>
         </div>
         <Progress
-          percent={availRate}
+          percent={availRate != null ? availRate : 0}
           showInfo={false}
-          stroke={getRateColor(availRate)}
+          stroke={availRate != null ? getRateColor(availRate) : 'var(--semi-color-fill-1)'}
           size='small'
           style={{ height: 6 }}
         />
