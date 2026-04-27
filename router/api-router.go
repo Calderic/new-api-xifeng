@@ -70,6 +70,7 @@ func SetApiRouter(router *gin.Engine) {
 			selfRoute := userRoute.Group("/")
 			selfRoute.Use(middleware.UserAuth())
 			{
+				selfRoute.POST("/risk_warning/ack", controller.AcknowledgeRiskWarning)
 				selfRoute.GET("/self/groups", controller.GetUserGroups)
 				selfRoute.GET("/self", controller.GetSelf)
 				selfRoute.GET("/models", controller.GetUserModels)
@@ -263,6 +264,7 @@ func SetApiRouter(router *gin.Engine) {
 			riskRoute.GET("/config", controller.GetRiskCenterConfig)
 			riskRoute.GET("/detect-ip", controller.DetectRiskIP)
 			riskRoute.PUT("/config", controller.UpdateRiskCenterConfig)
+			riskRoute.GET("/groups", controller.GetRiskGroups)
 			riskRoute.GET("/rules", controller.GetRiskRules)
 			riskRoute.POST("/rules", controller.CreateRiskRule)
 			riskRoute.PUT("/rules/:id", controller.UpdateRiskRule)
@@ -270,6 +272,16 @@ func SetApiRouter(router *gin.Engine) {
 			riskRoute.GET("/subjects", controller.GetRiskSubjects)
 			riskRoute.POST("/subjects/:scope/:id/unblock", controller.UnblockRiskSubject)
 			riskRoute.GET("/incidents", controller.GetRiskIncidents)
+
+			// enforcement layer (unified post-hit handling)
+			riskRoute.GET("/enforcement/config", controller.GetEnforcementConfig)
+			riskRoute.PUT("/enforcement/config", controller.UpdateEnforcementConfig)
+			riskRoute.GET("/enforcement/overview", controller.GetEnforcementOverview)
+			riskRoute.GET("/enforcement/incidents", controller.GetEnforcementIncidents)
+			riskRoute.GET("/enforcement/counters", controller.GetEnforcementCounters)
+			riskRoute.POST("/enforcement/users/:id/reset_counter", controller.ResetEnforcementCounter)
+			riskRoute.POST("/enforcement/users/:id/unban", controller.UnbanEnforcementUser)
+			riskRoute.POST("/enforcement/test_email", controller.SendEnforcementTestEmail)
 		}
 		channelRoute := apiRouter.Group("/channel")
 		channelRoute.Use(middleware.AdminAuth())

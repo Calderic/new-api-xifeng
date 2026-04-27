@@ -255,6 +255,12 @@ func migrateDB() error {
 	if err := migrateTokenModelLimitsToText(); err != nil {
 		return err
 	}
+	// Drop the legacy (subject_type, subject_id) unique index on
+	// risk_subject_snapshot before AutoMigrate creates the v2 unique index
+	// that includes the group column. Idempotent across all three DBs.
+	if err := dropLegacyRiskSubjectUniqueIndex(); err != nil {
+		return err
+	}
 
 	err := DB.AutoMigrate(
 		&Channel{},
@@ -291,6 +297,7 @@ func migrateDB() error {
 		&RiskRule{},
 		&RiskSubjectSnapshot{},
 		&RiskIncident{},
+		&EnforcementIncident{},
 	)
 	if err != nil {
 		return err
@@ -464,6 +471,41 @@ PRIMARY KEY (` + "`id`" + `)
 		}
 		if err := DB.Exec("ALTER TABLE `" + tableName + "` ADD COLUMN " + col.DDL).Error; err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// dropLegacyRiskSubjectUniqueIndex removes the v1 unique index
+// idx_risk_subject_unique on risk_subject_snapshot (subject_type, subject_id)
+// so AutoMigrate can install the v2 index that also includes the group column.
+// Idempotent: every branch checks for existence first.
+func dropLegacyRiskSubjectUniqueIndex() error {
+	tableName := "risk_subject_snapshot"
+	legacyIndexName := "idx_risk_subject_unique"
+	if !DB.Migrator().HasTable(tableName) {
+		return nil
+	}
+	switch {
+	case common.UsingPostgreSQL:
+		if err := DB.Exec(`DROP INDEX IF EXISTS ` + legacyIndexName).Error; err != nil {
+			return fmt.Errorf("drop legacy risk subject unique index (pg): %w", err)
+		}
+	case common.UsingMySQL:
+		var count int
+		if err := DB.Raw(`SELECT COUNT(*) FROM information_schema.statistics
+			WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`,
+			tableName, legacyIndexName).Scan(&count).Error; err != nil {
+			return fmt.Errorf("probe legacy risk subject unique index (mysql): %w", err)
+		}
+		if count > 0 {
+			if err := DB.Exec("DROP INDEX `" + legacyIndexName + "` ON `" + tableName + "`").Error; err != nil {
+				return fmt.Errorf("drop legacy risk subject unique index (mysql): %w", err)
+			}
+		}
+	case common.UsingSQLite:
+		if err := DB.Exec(`DROP INDEX IF EXISTS ` + legacyIndexName).Error; err != nil {
+			return fmt.Errorf("drop legacy risk subject unique index (sqlite): %w", err)
 		}
 	}
 	return nil
