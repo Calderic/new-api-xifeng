@@ -273,6 +273,21 @@ func SetApiRouter(router *gin.Engine) {
 			riskRoute.POST("/subjects/:scope/:id/unblock", controller.UnblockRiskSubject)
 			riskRoute.GET("/incidents", controller.GetRiskIncidents)
 
+			// omni-moderation tab
+			riskRoute.GET("/moderation/config", controller.GetModerationConfig)
+			riskRoute.PUT("/moderation/config", controller.UpdateModerationConfig)
+			riskRoute.GET("/moderation/overview", controller.GetModerationOverview)
+			riskRoute.GET("/moderation/incidents", controller.GetModerationIncidents)
+			riskRoute.GET("/moderation/incidents/:id", controller.GetModerationIncidentDetail)
+			riskRoute.POST("/moderation/debug", controller.SubmitModerationDebug)
+			riskRoute.GET("/moderation/debug/:id", controller.GetModerationDebugResult)
+			riskRoute.GET("/moderation/categories", controller.GetModerationCategories)
+			riskRoute.GET("/moderation/rules", controller.GetModerationRules)
+			riskRoute.POST("/moderation/rules", controller.CreateModerationRule)
+			riskRoute.PUT("/moderation/rules/:id", controller.UpdateModerationRule)
+			riskRoute.DELETE("/moderation/rules/:id", controller.DeleteModerationRule)
+			riskRoute.GET("/moderation/queue_stats", controller.GetModerationQueueStats)
+
 			// enforcement layer (unified post-hit handling)
 			riskRoute.GET("/enforcement/config", controller.GetEnforcementConfig)
 			riskRoute.PUT("/enforcement/config", controller.UpdateEnforcementConfig)
