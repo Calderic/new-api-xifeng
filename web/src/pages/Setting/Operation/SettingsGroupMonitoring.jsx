@@ -155,10 +155,36 @@ export default function SettingsGroupMonitoring(props) {
   const rawGroups = parseArrayField(
     inputs['group_monitoring_setting.monitoring_groups']
   );
-  const selectedGroups =
+
+  const resolvedGroups =
     availableGroups.length > 0
-      ? rawGroups.filter((g) => availableGroups.includes(g))
+      ? rawGroups
+          .map((g) => {
+            if (availableGroups.includes(g)) return g;
+            const idx = parseInt(g, 10);
+            if (!isNaN(idx) && idx >= 0 && idx < availableGroups.length) {
+              return availableGroups[idx];
+            }
+            return null;
+          })
+          .filter((g) => g !== null)
       : rawGroups;
+
+  useEffect(() => {
+    if (availableGroups.length === 0 || rawGroups.length === 0) return;
+    const hasIndices = rawGroups.some(
+      (g) => !availableGroups.includes(g) && /^\d+$/.test(g)
+    );
+    if (!hasIndices) return;
+    const encoded = arrayToString(resolvedGroups);
+    setInputs((prev) => ({
+      ...prev,
+      'group_monitoring_setting.monitoring_groups': encoded,
+      'group_monitoring_setting.group_display_order': encoded,
+    }));
+  }, [availableGroups, inputs['group_monitoring_setting.monitoring_groups']]);
+
+  const selectedGroups = resolvedGroups;
 
   return (
     <Spin spinning={loading}>
