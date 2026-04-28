@@ -115,11 +115,6 @@ func runRedisAggregation(cfg operation_setting.GroupMonitoringSetting) {
 		monitoredSet[g] = struct{}{}
 	}
 
-	cacheSeparateSet := make(map[string]struct{}, len(cfg.CacheTokensSeparateGroups))
-	for _, g := range cfg.CacheTokensSeparateGroups {
-		cacheSeparateSet[g] = struct{}{}
-	}
-
 	ctx := context.Background()
 	var cursor uint64
 	channelAvailData := make(map[channelKey]*bucketData)
@@ -216,16 +211,7 @@ func runRedisAggregation(cfg operation_setting.GroupMonitoringSetting) {
 		}
 
 		if cache, ok := channelCacheData[ck]; ok && cache.PromptTokens > 0 {
-			if _, sep := cacheSeparateSet[ck.Group]; sep {
-				total := cache.PromptTokens + cache.CacheTokens
-				if total > 0 {
-					stat.CacheHitRate = float64(cache.CacheTokens) / float64(total) * 100
-				}
-			} else {
-				if cache.PromptTokens > 0 {
-					stat.CacheHitRate = float64(cache.CacheTokens) / float64(cache.PromptTokens) * 100
-				}
-			}
+			stat.CacheHitRate = float64(cache.CacheTokens) / float64(cache.PromptTokens) * 100
 		} else {
 			stat.CacheHitRate = -1
 		}
@@ -291,14 +277,7 @@ func runRedisAggregation(cfg operation_setting.GroupMonitoringSetting) {
 		}
 
 		if ga.totalPromptTok > 0 {
-			if _, sep := cacheSeparateSet[groupName]; sep {
-				total := ga.totalPromptTok + ga.totalCacheTok
-				if total > 0 {
-					stat.CacheHitRate = float64(ga.totalCacheTok) / float64(total) * 100
-				}
-			} else {
-				stat.CacheHitRate = float64(ga.totalCacheTok) / float64(ga.totalPromptTok) * 100
-			}
+			stat.CacheHitRate = float64(ga.totalCacheTok) / float64(ga.totalPromptTok) * 100
 		} else {
 			stat.CacheHitRate = -1
 		}
