@@ -66,4 +66,11 @@ const (
 	// ContextKeyLanguage stores the user's language preference for i18n
 	ContextKeyLanguage ContextKey = "language"
 	ContextKeyIsStream ContextKey = "is_stream"
+
+	// ContextKeyRateLimitSkipped marks that the current request was diverted from
+	// its primary (often affinity-bound) channel solely because of channel-level
+	// rate limiting. Used by the affinity layer to suppress SwitchOnSuccess so a
+	// transient rate-limit detour does not displace cache affinity on the
+	// original channel.
+	ContextKeyRateLimitSkipped ContextKey = "rate_limit_skipped"
 )

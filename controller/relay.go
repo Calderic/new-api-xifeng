@@ -234,14 +234,23 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			if decision.Allowed {
 				rateLimitToken = token
 			} else {
-				logger.LogWarn(c, fmt.Sprintf("channel %d (%s) rate-limited: reason=%s, action=%s", channel.Id, channel.Name, decision.Reason, rateLimitCfg.OnLimit))
+				// Hard affinity (SkipRetryOnFailure=true) demands that requests
+				// stay on the original channel even at the cost of failing.
+				// Honor that by overriding skip/queue with reject so we 429
+				// instead of silently routing to a different channel.
+				effectiveOnLimit := rateLimitCfg.OnLimit
+				if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
+					effectiveOnLimit = channel_limiter.OnLimitReject
+				}
+
+				logger.LogWarn(c, fmt.Sprintf("channel %d (%s) rate-limited: reason=%s, action=%s", channel.Id, channel.Name, decision.Reason, effectiveOnLimit))
 				rlErr := types.NewErrorWithStatusCode(
 					fmt.Errorf("渠道 %s 已达限流 (%s)", channel.Name, decision.Reason),
 					types.ErrorCodeChannelRateLimited,
 					http.StatusTooManyRequests,
 				)
 				relayInfo.LastError = rlErr
-				if rateLimitCfg.OnLimit == channel_limiter.OnLimitReject {
+				if effectiveOnLimit == channel_limiter.OnLimitReject {
 					newAPIError = types.NewErrorWithStatusCode(
 						fmt.Errorf("渠道 %s 已达限流 (%s)", channel.Name, decision.Reason),
 						types.ErrorCodeChannelRateLimited,
@@ -250,7 +259,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 					)
 					break
 				}
-				// skip / queue-timeout / queue-full: try the next channel via retry
+				// skip / queue-timeout / queue-full: signal the affinity layer
+				// that this detour is rate-limit driven so it won't displace
+				// the original cache-friendly channel via SwitchOnSuccess.
+				common.SetContextKey(c, constant.ContextKeyRateLimitSkipped, true)
 				continue
 			}
 		}
