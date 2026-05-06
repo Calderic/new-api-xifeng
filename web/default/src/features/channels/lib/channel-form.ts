@@ -1,6 +1,18 @@
 import { z } from 'zod'
 import { CHANNEL_STATUS, MODEL_FETCHABLE_TYPES } from '../constants'
 import type { Channel } from '../types'
+import {
+  channelRateLimitSchema,
+  errorFilterRuleSchema,
+  riskControlHeaderRuleSchema,
+  DEFAULT_CHANNEL_RATE_LIMIT,
+  normalizeChannelRateLimit,
+  normalizeErrorFilterRules,
+  normalizeRiskControlHeaders,
+  type ChannelRateLimit,
+  type ErrorFilterRule,
+  type RiskControlHeaderRule,
+} from './channel-extra-rules'
 
 // ============================================================================
 // Form Validation Schema
@@ -60,6 +72,11 @@ export const channelFormSchema = z.object({
   upstream_model_update_check_enabled: z.boolean().optional(),
   upstream_model_update_auto_sync_enabled: z.boolean().optional(),
   upstream_model_update_ignored_models: z.string().optional(),
+  // Custom: rate limit / risk control headers / error filter rules
+  // Stored in `setting` JSON (singular) alongside force_format etc.
+  rate_limit: channelRateLimitSchema.optional(),
+  risk_control_headers: z.array(riskControlHeaderRuleSchema).optional(),
+  error_filter_rules: z.array(errorFilterRuleSchema).optional(),
 })
 
 export type ChannelFormValues = z.infer<typeof channelFormSchema>
@@ -117,6 +134,9 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   upstream_model_update_check_enabled: false,
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
+  rate_limit: { ...DEFAULT_CHANNEL_RATE_LIMIT },
+  risk_control_headers: [],
+  error_filter_rules: [],
 }
 
 // ============================================================================
@@ -138,6 +158,9 @@ export function transformChannelToFormDefaults(
     system_prompt: '',
     system_prompt_override: false,
   }
+  let rateLimit: ChannelRateLimit = { ...DEFAULT_CHANNEL_RATE_LIMIT }
+  let riskControlHeaders: RiskControlHeaderRule[] = []
+  let errorFilterRules: ErrorFilterRule[] = []
 
   if (channel.setting) {
     try {
@@ -150,6 +173,11 @@ export function transformChannelToFormDefaults(
         system_prompt: parsed.system_prompt || '',
         system_prompt_override: parsed.system_prompt_override || false,
       }
+      rateLimit = normalizeChannelRateLimit(parsed.rate_limit)
+      riskControlHeaders = normalizeRiskControlHeaders(
+        parsed.risk_control_headers
+      )
+      errorFilterRules = normalizeErrorFilterRules(parsed.error_filter_rules)
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to parse channel setting:', error)
@@ -244,6 +272,9 @@ export function transformChannelToFormDefaults(
     upstream_model_update_check_enabled: upstreamModelUpdateCheckEnabled,
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
+    rate_limit: rateLimit,
+    risk_control_headers: riskControlHeaders,
+    error_filter_rules: errorFilterRules,
   }
 }
 
@@ -251,13 +282,33 @@ export function transformChannelToFormDefaults(
  * Build the setting JSON string from form extra settings
  */
 function buildSettingJSON(formData: ChannelFormValues): string {
-  const settingObj = {
+  const rateLimit = normalizeChannelRateLimit(formData.rate_limit)
+  const riskControlHeaders = normalizeRiskControlHeaders(
+    formData.risk_control_headers
+  )
+  const errorFilterRules = normalizeErrorFilterRules(
+    formData.error_filter_rules
+  )
+
+  const settingObj: Record<string, unknown> = {
     force_format: formData.force_format || false,
     thinking_to_content: formData.thinking_to_content || false,
     proxy: formData.proxy || '',
     pass_through_body_enabled: formData.pass_through_body_enabled || false,
     system_prompt: formData.system_prompt || '',
     system_prompt_override: formData.system_prompt_override || false,
+  }
+
+  // Only include rate_limit if it's enabled or has non-default values to keep
+  // the JSON tidy when the feature is unused.
+  if (rateLimit.enabled) {
+    settingObj.rate_limit = rateLimit
+  }
+  if (riskControlHeaders.length > 0) {
+    settingObj.risk_control_headers = riskControlHeaders
+  }
+  if (errorFilterRules.length > 0) {
+    settingObj.error_filter_rules = errorFilterRules
   }
   return JSON.stringify(settingObj)
 }

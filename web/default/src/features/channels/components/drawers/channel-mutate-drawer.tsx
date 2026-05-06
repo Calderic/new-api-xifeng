@@ -30,6 +30,7 @@ import {
   Server,
   Settings,
   SlidersHorizontal,
+  ShieldCheck,
   Wand2,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -140,6 +141,9 @@ import {
 } from '../dialogs/missing-models-confirmation-dialog'
 import { ParamOverrideEditorDialog } from '../dialogs/param-override-editor-dialog'
 import { StatusCodeRiskDialog } from '../dialogs/status-code-risk-dialog'
+import { ChannelRateLimitEditor } from '../editors/channel-rate-limit-editor'
+import { ErrorFilterRulesEditor } from '../editors/error-filter-rules-editor'
+import { RiskControlHeadersEditor } from '../editors/risk-control-headers-editor'
 import { ModelMappingEditor } from '../model-mapping-editor'
 
 type ChannelMutateDrawerProps = {
@@ -223,7 +227,10 @@ function hasAdvancedSettingsValues(values: ChannelFormValues): boolean {
     values.claude_beta_query ||
     values.upstream_model_update_check_enabled ||
     values.upstream_model_update_auto_sync_enabled ||
-    values.upstream_model_update_ignored_models?.trim()
+    values.upstream_model_update_ignored_models?.trim() ||
+    values.rate_limit?.enabled ||
+    (values.risk_control_headers && values.risk_control_headers.length > 0) ||
+    (values.error_filter_rules && values.error_filter_rules.length > 0)
   )
 }
 
@@ -3270,6 +3277,64 @@ export function ChannelMutateDrawer({
                         </div>
                       </div>
                     )}
+                  </div>
+
+                  {/* ── Routing Resilience: rate limit / risk control / error filter ── */}
+                  <div className='bg-card space-y-6 rounded-xl border p-5'>
+                    <CardHeading
+                      title={t('Routing Resilience')}
+                      icon={<ShieldCheck className='h-4 w-4' />}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name='rate_limit'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <ChannelRateLimitEditor
+                              value={field.value}
+                              onChange={field.onChange}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className='border-t pt-5'>
+                      <FormField
+                        control={form.control}
+                        name='risk_control_headers'
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <RiskControlHeadersEditor
+                                value={field.value}
+                                onChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className='border-t pt-5'>
+                      <FormField
+                        control={form.control}
+                        name='error_filter_rules'
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <ErrorFilterRulesEditor
+                                value={field.value}
+                                onChange={field.onChange}
+                                channelId={channelId ?? undefined}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                   </div>
                 </CollapsibleContent>
               </Collapsible>
