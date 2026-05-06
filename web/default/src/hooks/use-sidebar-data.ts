@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   Activity,
+  Gauge,
   Key,
   FileText,
   Wallet,
@@ -79,6 +80,11 @@ export function useSidebarData(): SidebarData {
             activeUrls: ['/usage-logs/drawing'],
             configUrls: ['/usage-logs/drawing', '/usage-logs/task'],
             icon: ListTodo,
+          },
+          {
+            title: t('Group Monitoring'),
+            url: '/group-monitoring',
+            icon: Gauge,
           },
         ],
       },
