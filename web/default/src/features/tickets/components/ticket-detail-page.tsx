@@ -43,6 +43,7 @@ import { InvoiceDetailCard } from './invoice-detail-card'
 import { RefundDetailCard } from './refund-detail-card'
 import { TicketConversation } from './ticket-conversation'
 import { TicketReplyBox } from './ticket-reply-box'
+import { TicketUserProfileSheet } from './user-profile-sheet'
 import {
   Select,
   SelectContent,
@@ -215,6 +216,13 @@ export function TicketDetailPage({ ticketId, admin, backTo }: Props) {
               </p>
             </div>
             <div className='flex flex-wrap items-center gap-2'>
+              {admin && (
+                <TicketUserProfileSheet
+                  ticketId={ticket.id}
+                  username={ticket.username}
+                  userId={ticket.user_id}
+                />
+              )}
               {admin && (
                 <Select
                   value={String(ticket.status)}
