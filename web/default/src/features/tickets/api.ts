@@ -1,7 +1,10 @@
 import { api } from '@/lib/api'
 import type {
+  CreateInvoiceTicketPayload,
   CreateRefundTicketPayload,
   CreateTicketPayload,
+  EligibleTopUpOrder,
+  InvoiceStatus,
   Ticket,
   TicketDetail,
   TicketListResponse,
@@ -147,6 +150,51 @@ export async function updateRefundStatus(
   )
   if (!res.data.success) {
     throw new Error(res.data.message || 'Failed to update refund status')
+  }
+  return true
+}
+
+// ----------------------------------------------------------------------------
+// Invoice flow
+// ----------------------------------------------------------------------------
+
+export async function fetchEligibleInvoiceOrders(): Promise<
+  EligibleTopUpOrder[]
+> {
+  const res = await api.get<ApiResponse<EligibleTopUpOrder[] | null>>(
+    '/api/ticket/invoice/eligible_orders'
+  )
+  if (!res.data.success) {
+    throw new Error(
+      res.data.message || 'Failed to load orders eligible for invoice'
+    )
+  }
+  return res.data.data ?? []
+}
+
+export async function createInvoiceTicket(
+  payload: CreateInvoiceTicketPayload
+): Promise<Ticket | null> {
+  const res = await api.post<ApiResponse<Ticket>>(
+    '/api/ticket/invoice/',
+    payload
+  )
+  if (!res.data.success) {
+    throw new Error(res.data.message || 'Failed to create invoice ticket')
+  }
+  return res.data.data ?? null
+}
+
+export async function updateInvoiceStatus(
+  ticketId: number,
+  status: InvoiceStatus
+): Promise<boolean> {
+  const res = await api.put<ApiResponse<unknown>>(
+    `/api/ticket/admin/${ticketId}/invoice/status`,
+    { invoice_status: status }
+  )
+  if (!res.data.success) {
+    throw new Error(res.data.message || 'Failed to update invoice status')
   }
   return true
 }

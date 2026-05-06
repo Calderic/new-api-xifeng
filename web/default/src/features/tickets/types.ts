@@ -53,6 +53,56 @@ export type Ticket = {
   updated_time: number
 }
 
+export const INVOICE_STATUS = {
+  PENDING: 1,
+  ISSUED: 2,
+  REJECTED: 3,
+} as const
+
+export type InvoiceStatus = (typeof INVOICE_STATUS)[keyof typeof INVOICE_STATUS]
+
+export type TicketInvoice = {
+  id: number
+  ticket_id: number
+  user_id: number
+  company_name: string
+  tax_number: string
+  bank_name: string
+  bank_account: string
+  company_address: string
+  company_phone: string
+  email: string
+  topup_order_ids: string
+  total_money: number
+  invoice_status: InvoiceStatus
+  issued_time: number
+  created_time: number
+}
+
+export type EligibleTopUpOrder = {
+  id: number
+  trade_no: string
+  payment_method: string
+  amount: number
+  money: number
+  status: string
+  create_time: number
+}
+
+export type CreateInvoiceTicketPayload = {
+  subject: string
+  priority: TicketPriority
+  content: string
+  company_name: string
+  tax_number: string
+  bank_name?: string
+  bank_account?: string
+  company_address?: string
+  company_phone?: string
+  email: string
+  topup_order_ids: number[]
+}
+
 export const REFUND_STATUS = {
   PENDING: 1,
   REFUNDED: 2,
@@ -104,8 +154,8 @@ export type UpdateRefundStatusPayload = {
 export type TicketDetail = {
   ticket: Ticket
   messages: TicketMessage[]
-  invoice?: unknown
-  invoice_orders?: unknown[]
+  invoice?: TicketInvoice | null
+  invoice_orders?: EligibleTopUpOrder[]
   refund?: TicketRefund | null
 }
 

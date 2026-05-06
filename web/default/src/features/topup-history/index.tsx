@@ -35,6 +35,7 @@ import { useDebounce } from '@/hooks/use-debounce'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { cn } from '@/lib/utils'
 import { Coins, ReceiptText, Search } from 'lucide-react'
+import { InvoiceTicketDialog } from '@/features/tickets/components/invoice-ticket-dialog'
 import {
   adminCompleteTopup,
   fetchTopups,
@@ -122,6 +123,7 @@ export function TopupHistory() {
   const [pendingCompleteTradeNo, setPendingCompleteTradeNo] = useState<
     string | null
   >(null)
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false)
 
   const debouncedKeyword = useDebounce(keyword, 350)
 
@@ -203,15 +205,16 @@ export function TopupHistory() {
 
         {/* Filter bar */}
         <div className='bg-card flex flex-wrap items-center gap-2 rounded-xl border p-3'>
-          <Button
-            type='button'
-            variant='default'
-            disabled
-            title={t('Available after the ticket system migration')}
-          >
-            <ReceiptText className='mr-1.5 h-3.5 w-3.5' />
-            {t('Request invoice')}
-          </Button>
+          {!admin && (
+            <Button
+              type='button'
+              variant='default'
+              onClick={() => setInvoiceDialogOpen(true)}
+            >
+              <ReceiptText className='mr-1.5 h-3.5 w-3.5' />
+              {t('Request invoice')}
+            </Button>
+          )}
           <Select
             value={status}
             onValueChange={(v) => setStatus(v as 'all' | TopupStatus)}
@@ -401,6 +404,11 @@ export function TopupHistory() {
           </div>
         </div>
       </div>
+
+      <InvoiceTicketDialog
+        open={invoiceDialogOpen}
+        onOpenChange={setInvoiceDialogOpen}
+      />
 
       <AlertDialog
         open={pendingCompleteTradeNo !== null}
