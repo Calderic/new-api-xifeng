@@ -53,12 +53,60 @@ export type Ticket = {
   updated_time: number
 }
 
+export const REFUND_STATUS = {
+  PENDING: 1,
+  REFUNDED: 2,
+  REJECTED: 3,
+} as const
+
+export type RefundStatus = (typeof REFUND_STATUS)[keyof typeof REFUND_STATUS]
+
+export type RefundPayeeType = 'alipay' | 'wechat' | 'bank' | 'other'
+
+export type TicketRefund = {
+  id: number
+  ticket_id: number
+  user_id: number
+  refund_quota: number
+  frozen_quota: number
+  user_quota_snapshot: number
+  payee_type: RefundPayeeType
+  payee_name: string
+  payee_account: string
+  payee_bank: string
+  contact: string
+  reason: string
+  refund_status: RefundStatus
+  processed_time: number
+  created_time: number
+}
+
+export type CreateRefundTicketPayload = {
+  subject: string
+  priority: TicketPriority
+  refund_quota: number
+  payee_type: RefundPayeeType
+  payee_name: string
+  payee_account: string
+  payee_bank?: string
+  contact: string
+  reason: string
+}
+
+export type RefundQuotaMode = 'write_off' | 'subtract' | 'override'
+
+export type UpdateRefundStatusPayload = {
+  refund_status: RefundStatus
+  quota_mode?: RefundQuotaMode
+  actual_refund_quota?: number
+}
+
 export type TicketDetail = {
   ticket: Ticket
   messages: TicketMessage[]
   invoice?: unknown
   invoice_orders?: unknown[]
-  refund?: unknown
+  refund?: TicketRefund | null
 }
 
 export type TicketListResponse = {

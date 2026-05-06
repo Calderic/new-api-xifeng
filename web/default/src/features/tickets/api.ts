@@ -1,10 +1,12 @@
 import { api } from '@/lib/api'
 import type {
+  CreateRefundTicketPayload,
   CreateTicketPayload,
   Ticket,
   TicketDetail,
   TicketListResponse,
   TicketStatus,
+  UpdateRefundStatusPayload,
 } from './types'
 
 type ApiResponse<T> = {
@@ -116,4 +118,49 @@ export async function createTicket(
     throw new Error(res.data.message || 'Failed to create ticket')
   }
   return res.data.data ?? null
+}
+
+// ----------------------------------------------------------------------------
+// Refund flow
+// ----------------------------------------------------------------------------
+
+export async function createRefundTicket(
+  payload: CreateRefundTicketPayload
+): Promise<Ticket | null> {
+  const res = await api.post<ApiResponse<Ticket>>(
+    '/api/ticket/refund/',
+    payload
+  )
+  if (!res.data.success) {
+    throw new Error(res.data.message || 'Failed to create refund ticket')
+  }
+  return res.data.data ?? null
+}
+
+export async function updateRefundStatus(
+  ticketId: number,
+  payload: UpdateRefundStatusPayload
+): Promise<boolean> {
+  const res = await api.put<ApiResponse<unknown>>(
+    `/api/ticket/admin/${ticketId}/refund/status`,
+    payload
+  )
+  if (!res.data.success) {
+    throw new Error(res.data.message || 'Failed to update refund status')
+  }
+  return true
+}
+
+export async function fetchUserQuota(
+  userId: number
+): Promise<number | null> {
+  try {
+    const res = await api.get<ApiResponse<{ quota: number }>>(
+      `/api/user/${userId}`
+    )
+    if (!res.data.success) return null
+    return Number(res.data.data?.quota ?? 0)
+  } catch {
+    return null
+  }
 }

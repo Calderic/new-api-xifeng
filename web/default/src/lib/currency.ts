@@ -443,6 +443,50 @@ export function formatQuotaWithCurrency(
 }
 
 /**
+ * Convert a user-entered display amount (in the active currency) back into
+ * raw quota units. Inverse of `formatQuotaWithCurrency`.
+ *
+ * Useful for forms where users type amounts (e.g. refund requests) and the
+ * backend expects quota integers.
+ *
+ * @example
+ * // quotaDisplayType: 'CNY', quotaPerUnit: 500_000, usdExchangeRate: 7
+ * displayAmountToQuota(7) → 500_000  // ¥7 → 1 USD → 500_000 quota
+ *
+ * @example
+ * // quotaDisplayType: 'TOKENS'
+ * displayAmountToQuota(123) → 123
+ */
+export function displayAmountToQuota(amount: number | null | undefined): number {
+  const value = Number(amount ?? 0)
+  if (!Number.isFinite(value) || value === 0) return 0
+  const sign = Math.sign(value)
+  const abs = Math.abs(value)
+  const { config, meta } = getCurrencyDisplay()
+  if (meta.kind === 'tokens') {
+    return Math.round(value)
+  }
+  let usd = abs
+  switch (config.quotaDisplayType) {
+    case 'CNY':
+      usd = abs / (config.usdExchangeRate || 1)
+      break
+    case 'CUSTOM':
+      usd =
+        abs /
+        (config.customCurrencyExchangeRate &&
+        config.customCurrencyExchangeRate > 0
+          ? config.customCurrencyExchangeRate
+          : 1)
+      break
+    case 'USD':
+    default:
+      usd = abs
+  }
+  return sign * Math.round(usd * config.quotaPerUnit)
+}
+
+/**
  * Get the current currency label for UI display.
  *
  * Returns a simple string label representing the current display currency.

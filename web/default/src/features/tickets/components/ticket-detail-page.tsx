@@ -39,6 +39,7 @@ import {
   type TicketPriority,
   type TicketStatus,
 } from '../types'
+import { RefundDetailCard } from './refund-detail-card'
 import { TicketConversation } from './ticket-conversation'
 import { TicketReplyBox } from './ticket-reply-box'
 import {
@@ -276,14 +277,23 @@ export function TicketDetailPage({ ticketId, admin, backTo }: Props) {
             )}
           </dl>
 
-          {(ticket.type === 'invoice' || ticket.type === 'refund') && (
+          {ticket.type === 'invoice' && (
             <div className='border-amber-500/40 bg-amber-500/10 mt-4 rounded-md border px-3 py-2 text-xs text-amber-700 dark:text-amber-300'>
               {t(
-                'Invoice and refund details are still managed in the classic frontend. Open this ticket there for full controls.'
+                'Invoice details are managed on the topup history page; the conversation thread continues here.'
               )}
             </div>
           )}
         </div>
+
+        {detail?.refund && (
+          <RefundDetailCard
+            ticket={ticket}
+            refund={detail.refund}
+            admin={admin}
+            onChanged={loadDetail}
+          />
+        )}
 
         <TicketConversation
           messages={messages}
