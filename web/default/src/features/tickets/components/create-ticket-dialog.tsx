@@ -21,7 +21,9 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { createTicket } from '../api'
+import { useTicketAttachments } from '../hooks/use-ticket-attachments'
 import { TICKET_PRIORITY, type TicketPriority } from '../types'
+import { AttachmentPicker } from './attachment-picker'
 
 type Props = {
   open: boolean
@@ -43,19 +45,23 @@ export function CreateTicketDialog({ open, onOpenChange, onCreated }: Props) {
     TICKET_PRIORITY.NORMAL
   )
   const [submitting, setSubmitting] = useState(false)
+  const attachmentState = useTicketAttachments()
 
   useEffect(() => {
     if (!open) {
       setSubject('')
       setContent('')
       setPriority(TICKET_PRIORITY.NORMAL)
+      // Drop any uploaded-but-unsubmitted attachments to free server storage.
+      attachmentState.discardAll()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const canSubmit = subject.trim().length > 0 && content.trim().length > 0
 
   const handleSubmit = async () => {
-    if (!canSubmit || submitting) return
+    if (!canSubmit || submitting || attachmentState.uploading) return
     setSubmitting(true)
     try {
       await createTicket({
@@ -63,9 +69,10 @@ export function CreateTicketDialog({ open, onOpenChange, onCreated }: Props) {
         subject: subject.trim(),
         priority,
         content: content.trim(),
-        attachment_ids: [],
+        attachment_ids: attachmentState.attachments.map((a) => a.id),
       })
       toast.success(t('Ticket created'))
+      attachmentState.reset()
       onCreated()
       onOpenChange(false)
     } catch (e) {
@@ -116,7 +123,10 @@ export function CreateTicketDialog({ open, onOpenChange, onCreated }: Props) {
               </SelectContent>
             </Select>
           </div>
-          <div className='space-y-1.5'>
+          <div
+            className='space-y-1.5'
+            onPasteCapture={(e) => attachmentState.handlePaste(e)}
+          >
             <Label>{t('Description')}</Label>
             <Textarea
               value={content}
@@ -125,6 +135,7 @@ export function CreateTicketDialog({ open, onOpenChange, onCreated }: Props) {
               maxLength={5000}
               placeholder={t('Describe the issue in detail')}
             />
+            <AttachmentPicker state={attachmentState} disabled={submitting} />
           </div>
         </div>
         <DialogFooter>

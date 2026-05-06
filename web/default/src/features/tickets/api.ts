@@ -62,14 +62,15 @@ export async function fetchTicketDetail(
 export async function postTicketReply(
   ticketId: number,
   content: string,
-  admin: boolean
+  admin: boolean,
+  attachmentIds: number[] = []
 ): Promise<boolean> {
   const path = admin
     ? `/api/ticket/admin/${ticketId}/message`
     : `/api/ticket/self/${ticketId}/message`
   const res = await api.post<ApiResponse<unknown>>(path, {
     content,
-    attachment_ids: [],
+    attachment_ids: attachmentIds,
   })
   if (!res.data.success) {
     throw new Error(res.data.message || 'Failed to send reply')

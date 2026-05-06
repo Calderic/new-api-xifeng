@@ -85,9 +85,12 @@ export function TicketDetailPage({ ticketId, admin, backTo }: Props) {
   const ticket: Ticket | undefined = detail?.ticket
   const messages = detail?.messages || []
 
-  const handleReply = async (content: string): Promise<boolean> => {
+  const handleReply = async (
+    content: string,
+    attachmentIds: number[]
+  ): Promise<boolean> => {
     try {
-      await postTicketReply(ticketId, content, admin)
+      await postTicketReply(ticketId, content, admin, attachmentIds)
       toast.success(t('Reply sent'))
       await loadDetail()
       return true
