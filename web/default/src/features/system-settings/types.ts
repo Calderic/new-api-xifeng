@@ -199,6 +199,16 @@ export type IntegrationSettings = {
   WaffoPancakeCurrency: string
   WaffoPancakeUnitPrice: number
   WaffoPancakeMinTopUp: number
+  // Ticket system (custom)
+  TicketNotifyEnabled: boolean
+  TicketAdminEmail: string
+  TicketAttachmentEnabled: boolean
+  TicketAttachmentMaxSize: string
+  TicketAttachmentMaxCount: string
+  TicketAttachmentAllowedExts: string
+  TicketAttachmentLocalPath: string
+  TicketAttachmentSignedURLTTL: string
+  TicketAssignConfig: string
   // Group monitoring (custom)
   'group_monitoring_setting.monitoring_groups': string
   'group_monitoring_setting.group_display_order': string

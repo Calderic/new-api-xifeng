@@ -3,6 +3,7 @@ import { createSectionRegistry } from '../utils/section-registry'
 import { EmailSettingsSection } from './email-settings-section'
 import { EmailTemplateSettingsSection } from './email-template-section'
 import { GroupMonitoringSettingsSection } from './group-monitoring-section'
+import { TicketSettingsSection } from './ticket-section'
 import { IoNetDeploymentSettingsSection } from './ionet-deployment-settings-section'
 import { MonitoringSettingsSection } from './monitoring-settings-section'
 import { PaymentSettingsSection } from './payment-settings-section'
@@ -178,6 +179,26 @@ const INTEGRATIONS_SECTIONS = [
     titleKey: 'Email Templates',
     descriptionKey: 'Customize subject and HTML body of system emails',
     build: () => <EmailTemplateSettingsSection />,
+  },
+  {
+    id: 'ticket',
+    titleKey: 'Ticket System',
+    descriptionKey: 'Notification, attachments and ticket assignment',
+    build: (settings: IntegrationSettings) => (
+      <TicketSettingsSection
+        defaultValues={{
+          TicketNotifyEnabled: settings.TicketNotifyEnabled,
+          TicketAdminEmail: settings.TicketAdminEmail,
+          TicketAttachmentEnabled: settings.TicketAttachmentEnabled,
+          TicketAttachmentMaxSize: settings.TicketAttachmentMaxSize,
+          TicketAttachmentMaxCount: settings.TicketAttachmentMaxCount,
+          TicketAttachmentAllowedExts: settings.TicketAttachmentAllowedExts,
+          TicketAttachmentLocalPath: settings.TicketAttachmentLocalPath,
+          TicketAttachmentSignedURLTTL: settings.TicketAttachmentSignedURLTTL,
+          TicketAssignConfig: settings.TicketAssignConfig,
+        }}
+      />
+    ),
   },
 ] as const
 
