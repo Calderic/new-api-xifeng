@@ -20,6 +20,7 @@ import {
   ListTodo,
   Receipt,
   Settings,
+  ShieldAlert,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
@@ -151,6 +152,11 @@ export function useSidebarData(): SidebarData {
             title: t('Ticket Admin'),
             url: '/admin-tickets',
             icon: Headset,
+          },
+          {
+            title: t('Risk Center'),
+            url: '/risk-center',
+            icon: ShieldAlert,
           },
           {
             title: t('Subscription Management'),
