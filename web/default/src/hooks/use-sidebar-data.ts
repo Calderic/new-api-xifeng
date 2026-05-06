@@ -12,9 +12,11 @@ import {
   Command,
   Radio,
   FlaskConical,
+  LifeBuoy,
   MessageSquare,
   CreditCard,
   Gift,
+  Headset,
   ListTodo,
   Receipt,
   Settings,
@@ -105,6 +107,11 @@ export function useSidebarData(): SidebarData {
             icon: Receipt,
           },
           {
+            title: t('Support tickets'),
+            url: '/tickets',
+            icon: LifeBuoy,
+          },
+          {
             title: t('Profile'),
             url: '/profile',
             icon: User,
@@ -139,6 +146,11 @@ export function useSidebarData(): SidebarData {
             title: t('Invitation Codes'),
             url: '/invitation-codes',
             icon: Gift,
+          },
+          {
+            title: t('Ticket Admin'),
+            url: '/admin-tickets',
+            icon: Headset,
           },
           {
             title: t('Subscription Management'),
