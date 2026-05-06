@@ -57,9 +57,36 @@ export async function updateRiskConfig(config: RiskConfig): Promise<boolean> {
   return true
 }
 
+function safeParseArray<T>(value: unknown, fallback: T[]): T[] {
+  if (Array.isArray(value)) return value as T[]
+  if (typeof value === 'string') {
+    if (!value.trim()) return fallback
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? (parsed as T[]) : fallback
+    } catch {
+      return fallback
+    }
+  }
+  return fallback
+}
+
+/**
+ * Backend serializes RiskRule.{conditions,groups} as JSON-encoded strings;
+ * normalize once on read so the rest of the UI can rely on real arrays.
+ */
+function normalizeRule(raw: RiskRule): RiskRule {
+  return {
+    ...raw,
+    conditions: safeParseArray(raw.conditions, [] as RiskRule['conditions']),
+    groups: safeParseArray(raw.groups, [] as string[]),
+  }
+}
+
 export async function fetchRules(): Promise<RiskRule[]> {
   const res = await api.get<ApiResponse<RiskRule[] | null>>('/api/risk/rules')
-  return unwrap(res, []) ?? []
+  const list = unwrap(res, []) ?? []
+  return list.map(normalizeRule)
 }
 
 export async function createRule(rule: Partial<RiskRule>): Promise<RiskRule | null> {

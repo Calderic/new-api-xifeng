@@ -183,7 +183,15 @@ export function DistributionTab() {
 
   const handleToggleRule = async (rule: RiskRule) => {
     try {
-      await updateRule(rule.id, { ...rule, enabled: !rule.enabled })
+      // Backend expects conditions/groups as JSON strings; rule.conditions
+      // and rule.groups are already-parsed arrays in memory.
+      const payload = {
+        ...rule,
+        enabled: !rule.enabled,
+        conditions: JSON.stringify(rule.conditions),
+        groups: JSON.stringify(rule.groups),
+      } as unknown as Partial<RiskRule>
+      await updateRule(rule.id, payload)
       toast.success(t('Rule updated'))
       reloadOverview()
     } catch (e) {

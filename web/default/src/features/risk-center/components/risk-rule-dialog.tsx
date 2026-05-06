@@ -130,11 +130,19 @@ export function RiskRuleDialog({
     }
     setSubmitting(true)
     try {
+      // Backend stores conditions / groups as JSON-encoded strings; serialize
+      // before sending. The form holds them as real arrays so the UI can map
+      // over them, then we re-encode here on submit.
+      const payload = {
+        ...form,
+        conditions: JSON.stringify(form.conditions),
+        groups: JSON.stringify(form.groups),
+      } as unknown as Partial<RiskRule>
       if (isEdit) {
-        await updateRule(form.id, form)
+        await updateRule(form.id, payload)
         toast.success(t('Rule updated'))
       } else {
-        await createRule(form)
+        await createRule(payload)
         toast.success(t('Rule created'))
       }
       onSaved()
