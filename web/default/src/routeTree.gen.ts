@@ -43,6 +43,7 @@ import { Route as AuthenticatedProfileIndexRouteImport } from './routes/_authent
 import { Route as AuthenticatedPlaygroundIndexRouteImport } from './routes/_authenticated/playground/index'
 import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenticated/models/index'
 import { Route as AuthenticatedKeysIndexRouteImport } from './routes/_authenticated/keys/index'
+import { Route as AuthenticatedInvitationCodesIndexRouteImport } from './routes/_authenticated/invitation-codes/index'
 import { Route as AuthenticatedGroupMonitoringIndexRouteImport } from './routes/_authenticated/group-monitoring/index'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels/index'
@@ -245,6 +246,12 @@ const AuthenticatedKeysIndexRoute = AuthenticatedKeysIndexRouteImport.update({
   path: '/keys/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedInvitationCodesIndexRoute =
+  AuthenticatedInvitationCodesIndexRouteImport.update({
+    id: '/invitation-codes/',
+    path: '/invitation-codes/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedGroupMonitoringIndexRoute =
   AuthenticatedGroupMonitoringIndexRouteImport.update({
     id: '/group-monitoring/',
@@ -412,6 +419,7 @@ export interface FileRoutesByFullPath {
   '/channels/': typeof AuthenticatedChannelsIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/group-monitoring/': typeof AuthenticatedGroupMonitoringIndexRoute
+  '/invitation-codes/': typeof AuthenticatedInvitationCodesIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
   '/playground/': typeof AuthenticatedPlaygroundIndexRoute
@@ -468,6 +476,7 @@ export interface FileRoutesByTo {
   '/channels': typeof AuthenticatedChannelsIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/group-monitoring': typeof AuthenticatedGroupMonitoringIndexRoute
+  '/invitation-codes': typeof AuthenticatedInvitationCodesIndexRoute
   '/keys': typeof AuthenticatedKeysIndexRoute
   '/models': typeof AuthenticatedModelsIndexRoute
   '/playground': typeof AuthenticatedPlaygroundIndexRoute
@@ -528,6 +537,7 @@ export interface FileRoutesById {
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/group-monitoring/': typeof AuthenticatedGroupMonitoringIndexRoute
+  '/_authenticated/invitation-codes/': typeof AuthenticatedInvitationCodesIndexRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
   '/_authenticated/playground/': typeof AuthenticatedPlaygroundIndexRoute
@@ -587,6 +597,7 @@ export interface FileRouteTypes {
     | '/channels/'
     | '/dashboard/'
     | '/group-monitoring/'
+    | '/invitation-codes/'
     | '/keys/'
     | '/models/'
     | '/playground/'
@@ -643,6 +654,7 @@ export interface FileRouteTypes {
     | '/channels'
     | '/dashboard'
     | '/group-monitoring'
+    | '/invitation-codes'
     | '/keys'
     | '/models'
     | '/playground'
@@ -702,6 +714,7 @@ export interface FileRouteTypes {
     | '/_authenticated/channels/'
     | '/_authenticated/dashboard/'
     | '/_authenticated/group-monitoring/'
+    | '/_authenticated/invitation-codes/'
     | '/_authenticated/keys/'
     | '/_authenticated/models/'
     | '/_authenticated/playground/'
@@ -988,6 +1001,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedKeysIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/invitation-codes/': {
+      id: '/_authenticated/invitation-codes/'
+      path: '/invitation-codes'
+      fullPath: '/invitation-codes/'
+      preLoaderRoute: typeof AuthenticatedInvitationCodesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/group-monitoring/': {
       id: '/_authenticated/group-monitoring/'
       path: '/group-monitoring'
@@ -1244,6 +1264,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
   AuthenticatedGroupMonitoringIndexRoute: typeof AuthenticatedGroupMonitoringIndexRoute
+  AuthenticatedInvitationCodesIndexRoute: typeof AuthenticatedInvitationCodesIndexRoute
   AuthenticatedKeysIndexRoute: typeof AuthenticatedKeysIndexRoute
   AuthenticatedModelsIndexRoute: typeof AuthenticatedModelsIndexRoute
   AuthenticatedPlaygroundIndexRoute: typeof AuthenticatedPlaygroundIndexRoute
@@ -1269,6 +1290,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
   AuthenticatedGroupMonitoringIndexRoute:
     AuthenticatedGroupMonitoringIndexRoute,
+  AuthenticatedInvitationCodesIndexRoute:
+    AuthenticatedInvitationCodesIndexRoute,
   AuthenticatedKeysIndexRoute: AuthenticatedKeysIndexRoute,
   AuthenticatedModelsIndexRoute: AuthenticatedModelsIndexRoute,
   AuthenticatedPlaygroundIndexRoute: AuthenticatedPlaygroundIndexRoute,
