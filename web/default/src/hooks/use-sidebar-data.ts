@@ -15,6 +15,7 @@ import {
   MessageSquare,
   CreditCard,
   ListTodo,
+  Receipt,
   Settings,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -96,6 +97,11 @@ export function useSidebarData(): SidebarData {
             title: t('Wallet'),
             url: '/wallet',
             icon: Wallet,
+          },
+          {
+            title: t('Topup History'),
+            url: '/topup-history',
+            icon: Receipt,
           },
           {
             title: t('Profile'),
