@@ -199,6 +199,17 @@ export type IntegrationSettings = {
   WaffoPancakeCurrency: string
   WaffoPancakeUnitPrice: number
   WaffoPancakeMinTopUp: number
+  // Group monitoring (custom)
+  'group_monitoring_setting.monitoring_groups': string
+  'group_monitoring_setting.group_display_order': string
+  'group_monitoring_setting.availability_period_minutes': number
+  'group_monitoring_setting.cache_hit_period_minutes': number
+  'group_monitoring_setting.aggregation_interval_minutes': number
+  'group_monitoring_setting.availability_exclude_models': string
+  'group_monitoring_setting.cache_hit_exclude_models': string
+  'group_monitoring_setting.availability_exclude_keywords': string
+  'group_monitoring_setting.availability_exclude_status_codes': string
+  'group_monitoring_setting.cache_tokens_separate_groups': string
 }
 
 export type ModelSettings = {

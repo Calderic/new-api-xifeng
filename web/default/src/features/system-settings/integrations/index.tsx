@@ -74,6 +74,16 @@ const defaultIntegrationSettings: IntegrationSettingsType = {
   WaffoPancakeCurrency: 'USD',
   WaffoPancakeUnitPrice: 1,
   WaffoPancakeMinTopUp: 1,
+  'group_monitoring_setting.monitoring_groups': '',
+  'group_monitoring_setting.group_display_order': '',
+  'group_monitoring_setting.availability_period_minutes': 60,
+  'group_monitoring_setting.cache_hit_period_minutes': 60,
+  'group_monitoring_setting.aggregation_interval_minutes': 5,
+  'group_monitoring_setting.availability_exclude_models': '',
+  'group_monitoring_setting.cache_hit_exclude_models': '',
+  'group_monitoring_setting.availability_exclude_keywords': '',
+  'group_monitoring_setting.availability_exclude_status_codes': '',
+  'group_monitoring_setting.cache_tokens_separate_groups': '',
 }
 
 export function IntegrationSettings() {

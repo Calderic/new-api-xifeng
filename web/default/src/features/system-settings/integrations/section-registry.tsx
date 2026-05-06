@@ -1,6 +1,8 @@
 import type { IntegrationSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { EmailSettingsSection } from './email-settings-section'
+import { EmailTemplateSettingsSection } from './email-template-section'
+import { GroupMonitoringSettingsSection } from './group-monitoring-section'
 import { IoNetDeploymentSettingsSection } from './ionet-deployment-settings-section'
 import { MonitoringSettingsSection } from './monitoring-settings-section'
 import { PaymentSettingsSection } from './payment-settings-section'
@@ -137,6 +139,45 @@ const INTEGRATIONS_SECTIONS = [
         }}
       />
     ),
+  },
+  {
+    id: 'group-monitoring',
+    titleKey: 'Group Monitoring',
+    descriptionKey: 'Tune the group availability dashboard',
+    build: (settings: IntegrationSettings) => (
+      <GroupMonitoringSettingsSection
+        defaultValues={{
+          'group_monitoring_setting.monitoring_groups':
+            settings['group_monitoring_setting.monitoring_groups'],
+          'group_monitoring_setting.group_display_order':
+            settings['group_monitoring_setting.group_display_order'],
+          'group_monitoring_setting.availability_period_minutes':
+            settings['group_monitoring_setting.availability_period_minutes'],
+          'group_monitoring_setting.cache_hit_period_minutes':
+            settings['group_monitoring_setting.cache_hit_period_minutes'],
+          'group_monitoring_setting.aggregation_interval_minutes':
+            settings['group_monitoring_setting.aggregation_interval_minutes'],
+          'group_monitoring_setting.availability_exclude_models':
+            settings['group_monitoring_setting.availability_exclude_models'],
+          'group_monitoring_setting.cache_hit_exclude_models':
+            settings['group_monitoring_setting.cache_hit_exclude_models'],
+          'group_monitoring_setting.availability_exclude_keywords':
+            settings['group_monitoring_setting.availability_exclude_keywords'],
+          'group_monitoring_setting.availability_exclude_status_codes':
+            settings[
+              'group_monitoring_setting.availability_exclude_status_codes'
+            ],
+          'group_monitoring_setting.cache_tokens_separate_groups':
+            settings['group_monitoring_setting.cache_tokens_separate_groups'],
+        }}
+      />
+    ),
+  },
+  {
+    id: 'email-templates',
+    titleKey: 'Email Templates',
+    descriptionKey: 'Customize subject and HTML body of system emails',
+    build: () => <EmailTemplateSettingsSection />,
   },
 ] as const
 
